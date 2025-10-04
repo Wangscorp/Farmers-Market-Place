@@ -1,0 +1,34 @@
+.products-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+  padding: 2rem;
+}
+
+.product-item {
+  background: #fefefe;
+  border: 2px solid #daa520;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.product-item:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(138, 69, 19, 0.3);
+}
+
+.product-item h3 {
+  margin-top: 0;
+  color: #8b4513;
+}
+
+.product-item p {
+  margin: 0.5rem 0;
+  color: #2f4f2f;
+}
+
+.product-item button {
+  margin-top: 1rem;
+}

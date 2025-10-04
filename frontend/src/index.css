@@ -1,0 +1,53 @@
+:root {
+  font-family: 'Georgia', serif; /* Rustic serif font for farmer feel */
+  line-height: 1.6;
+  font-weight: 400;
+
+  color: #2f4f2f; /* Dark green for text */
+  background-color: #f5f5dc; /* Beige background */
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #228b22; /* Forest green links */
+  text-decoration: none;
+}
+a:hover {
+  color: #32cd32; /* Lime green on hover */
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: linear-gradient(to bottom, #f5f5dc, #daa520); /* Beige to gold gradient */
+}
+
+h1, h2, h3 {
+  color: #8b4513; /* Saddlebrown for headings */
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid #daa520;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #fdf5e6; /* Oldlace */
+  color: #2f4f2f;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+button:hover {
+  background-color: #daa520;
+  color: white;
+}
+button:focus,
+button:focus-visible {
+  outline: 2px solid #228b22;
+}

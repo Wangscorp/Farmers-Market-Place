@@ -1,0 +1,35 @@
+.auth {
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: #fdf5e6;
+  border: 2px solid #daa520;
+  border-radius: 12px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.auth h2 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.auth input {
+  width: 100%;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  border: 1px solid #daa520;
+  border-radius: 6px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.auth button {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.auth p {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #228b22;
+}

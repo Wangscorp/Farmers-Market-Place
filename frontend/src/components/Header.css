@@ -1,0 +1,32 @@
+header {
+  background-color: #228b22; /* Forest green */
+  color: white;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header h1 {
+  margin: 0;
+  font-family: 'Georgia', serif; /* Rustic font */
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+  padding: 0.5rem;
+  transition: background-color 0.3s;
+}
+
+nav a:hover {
+  background-color: #32cd32; /* Lime green */
+  border-radius: 4px;
+}

@@ -1,0 +1,60 @@
+# Project-wide ignores
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+
+# Data import/export files (if any)
+importdata/
+data/
+exports/
+
+# Build artifacts from various sources (in addition to specific ones in subdirs)
+build/
+dist/
+target/  # Though specified in backend/.gitignore
+
+# Cache directories
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Test results
+test-results/
+playwright-report/
+
+# Screenshots or attachments that might be in issues
+*.png.tmp
+*.jpg.tmp
