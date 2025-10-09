@@ -26,7 +26,6 @@ const VendorDashboard = () => {
         category,
         description,
         image: resizedImage,
-        vendor_id: 1, // hardcoded for now
       });
       alert('Product created: ' + JSON.stringify(response.data));
       // Reset form
@@ -54,7 +53,7 @@ const VendorDashboard = () => {
         />
         <input
           type="number"
-          placeholder="Price"
+          placeholder="Price in KSH"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           step="0.01"

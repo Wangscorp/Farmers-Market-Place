@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from '../api';  // Configured axios instance with base URL
 import { useUser } from './UserContext';  // React context for user state management
 import ImageUploadWithResize from './ImageUploadWithResize';  // Image compression component
@@ -15,6 +16,7 @@ import './Auth.css';
 const Auth = () => {
     // Hook from UserContext to update global user state
     const { login } = useUser();
+    const navigate = useNavigate();
 
     // Form state management
     const [isLogin, setIsLogin] = useState(true);  // Toggle between login/signup mode
@@ -41,6 +43,7 @@ const Auth = () => {
             // Update global user state with returned user data
             login(response.data);
             alert('Login successful');
+            navigate('/');
         } catch (error) {
             alert('Login failed: ' + error.response?.data);
         }
@@ -51,11 +54,18 @@ const Auth = () => {
      *
      * Validates password confirmation, sends user data to backend, and updates user context.
      * Handles signup errors like duplicate usernames/emails.
+     * Profile image is required for vendors for verification.
      */
     const handleSignup = async () => {
         // Client-side validation before API call
         if (password !== confirmPassword) {
             alert('Passwords do not match');
+            return;
+        }
+
+        // Require profile image for vendors
+        if (role === 'Vendor' && !resizedImage) {
+            alert('Profile image is required for vendor verification');
             return;
         }
 
@@ -69,6 +79,7 @@ const Auth = () => {
             });
             login(response.data);
             alert('Signup successful');
+            navigate('/');
         } catch (error) {
             alert('Signup failed: ' + error.response?.data);
         }

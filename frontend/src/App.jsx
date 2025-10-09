@@ -5,6 +5,7 @@ import Products from './components/Products';
 import Cart from './components/Cart';
 import Auth from './components/Auth';
 import VendorProfile from './components/VendorProfile';
+import AdminDashboard from './components/AdminDashboard';
 import './App.css';
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/vendor" element={<VendorProfile />} />
+          <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </main>
     </Router>

@@ -12,5 +12,17 @@ import axios from 'axios';
 // This allows the frontend to work in both development and production environments
 axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
+// Interceptor to add JWT token to requests
+axios.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
 // Export configured axios instance for use throughout the application
 export default axios;
