@@ -1,0 +1,26 @@
+# Rust build artifacts
+/target/
+
+# Environment variables and configuration
+.env
+.env.local
+.env.*.local
+
+# Database files (kept for robustness, though using PostgreSQL)
+/*.db
+/*.sqlite
+/*.sqlite3
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db

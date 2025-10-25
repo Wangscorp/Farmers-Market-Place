@@ -30,6 +30,9 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Remove backend's git artifacts if present
+backend/.git
+
 # Data import/export files (if any)
 importdata/
 data/
