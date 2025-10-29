@@ -8,7 +8,7 @@ pub struct Product {
     pub name: String,
     pub price: f64,
     pub category: String,
-    pub description: String,
+    pub description: Option<String>,
     pub image: Option<String>, // Base64 encoded image
     pub vendor_id: u32,
 }
@@ -21,6 +21,7 @@ pub struct User {
     pub role: Role,
     pub profile_image: Option<String>, // Base64 encoded image
     pub verified: bool,
+    pub banned: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

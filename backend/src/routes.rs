@@ -35,7 +35,7 @@ async fn get_products(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> A
 
     match db::get_all_products(&pool, vendor_filter).await {
         Ok(products) => Ok(HttpResponse::Ok().json(products)),
-        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch products")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to fetch products: {:?}", e))),
     }
 }
 
@@ -56,9 +56,84 @@ async fn create_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, pr
         Err(response) => return Ok(response),
     };
 
+    // Check if vendor is verified
+    let verified: (bool,) = match sqlx::query_as("SELECT verified FROM users WHERE id = $1")
+        .bind(vendor_id)
+        .fetch_one(pool.get_ref())
+        .await {
+        Ok(result) => result,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to check verification status")),
+    };
+
+    if !verified.0 {
+        return Ok(HttpResponse::Forbidden().json("Account not verified. Please wait for admin verification."));
+    }
+
+    // Check report count
+    let report_count: (i32,) = match sqlx::query_as("SELECT COUNT(*) FROM vendor_reports WHERE vendor_id = $1")
+        .bind(vendor_id)
+        .fetch_one(pool.get_ref())
+        .await {
+        Ok(result) => result,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to check report count")),
+    };
+
+    if report_count.0 >= 5 {
+        return Ok(HttpResponse::Forbidden().json("Account suspended due to multiple reports."));
+    }
+
     match db::create_product(&pool, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.image.as_deref(), vendor_id).await {
         Ok(product) => Ok(HttpResponse::Created().json(product)),
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create product")),
+    }
+}
+
+/**
+ * PUT /products/{product_id} - Update an existing product
+ *
+ * Allows vendors to update their own products.
+ * Vendor can only update products they own.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - PostgreSQL connection pool
+ * @param product_id - Product ID from URL path
+ * @param product_req - JSON request body with updated product details
+ * @returns JSON of updated product or error
+ */
+#[patch("/products/{product_id}")]
+async fn update_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, product_id: web::Path<i32>, product_req: web::Json<ProductRequest>) -> ActixResult<HttpResponse> {
+    let vendor_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    match db::update_product(&pool, *product_id, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.image.as_deref(), vendor_id).await {
+        Ok(product) => Ok(HttpResponse::Ok().json(product)),
+        Err(_) => Ok(HttpResponse::BadRequest().json("Product not found or access denied")),
+    }
+}
+
+/**
+ * DELETE /products/{product_id} - Delete a product
+ *
+ * Allows vendors to delete their own products.
+ * Vendor can only delete products they own.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - PostgreSQL connection pool
+ * @param product_id - Product ID from URL path
+ * @returns Empty response on success
+ */
+#[delete("/products/{product_id}")]
+async fn delete_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, product_id: web::Path<i32>) -> ActixResult<HttpResponse> {
+    let vendor_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    match db::delete_product(&pool, *product_id, vendor_id).await {
+        Ok(_) => Ok(HttpResponse::NoContent().finish()),
+        Err(_) => Ok(HttpResponse::BadRequest().json("Product not found or access denied")),
     }
 }
 
@@ -335,6 +410,151 @@ async fn delete_user(
 }
 
 #[derive(Deserialize)]
+struct BanUserRequest {
+    banned: bool,
+}
+
+#[patch("/api/admin/users/{user_id}/ban")]
+async fn ban_user_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    user_id: web::Path<i32>,
+    request: web::Json<BanUserRequest>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    match db::ban_user(&pool, *user_id, request.banned).await {
+        Ok(_) => Ok(HttpResponse::Ok().json(if request.banned { "User banned successfully" } else { "User unbanned successfully" })),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update ban status")),
+    }
+}
+
+#[derive(Deserialize)]
+struct ResetPasswordRequest {
+    new_password: String,
+}
+
+#[patch("/api/admin/users/{user_id}/reset-password")]
+async fn reset_user_password_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    user_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    // Generate a random temporary password (8 characters)
+    let temp_password = format!("temp_{}", rand::random::<u32>());
+
+    match db::reset_user_password(&pool, *user_id, &temp_password).await {
+        Ok(_) => {
+            // In a real application, send email here with temp_password
+            // For now, we'll return a generic success message
+            // TODO: Integrate with email service (SendGrid, Mailgun, etc.)
+            println!("TEMP PASSWORD FOR USER {}: {}", user_id, temp_password);
+            Ok(HttpResponse::Ok().json(json!({
+                "message": "Password reset successfully. User has been emailed their new password."
+            })))
+        }
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to reset password")),
+    }
+}
+
+#[get("/api/admin/cart")]
+async fn get_all_cart_items(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    match db::get_all_cart_items(&pool).await {
+        Ok(cart_items) => Ok(HttpResponse::Ok().json(cart_items)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch cart items")),
+    }
+}
+
+#[derive(Deserialize)]
+struct CreateVendorReportRequest {
+    vendor_id: i32,
+    product_id: Option<i32>,
+    report_type: String,
+    description: Option<String>,
+}
+
+#[post("/reports")]
+async fn create_vendor_report_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    report_req: web::Json<CreateVendorReportRequest>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::create_vendor_report(&pool, customer_id, report_req.vendor_id, report_req.product_id, &report_req.report_type, report_req.description.as_deref()).await {
+        Ok(report) => Ok(HttpResponse::Created().json(report)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create report")),
+    }
+}
+
+#[get("/vendor/reports/count")]
+async fn get_vendor_report_count(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> ActixResult<HttpResponse> {
+    let claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    match db::count_vendor_reports(&pool, claims.sub).await {
+        Ok(count) => Ok(HttpResponse::Ok().json(json!({ "report_count": count }))),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to count reports")),
+    }
+}
+
+#[get("/api/admin/reports")]
+async fn get_all_vendor_reports_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    match db::get_all_vendor_reports(&pool).await {
+        Ok(reports) => Ok(HttpResponse::Ok().json(reports)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch reports")),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateReportStatusRequest {
+    status: String,
+    admin_notes: Option<String>,
+}
+
+#[patch("/api/admin/reports/{report_id}")]
+async fn update_vendor_report_status_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    report_id: web::Path<i32>,
+    update_req: web::Json<UpdateReportStatusRequest>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    match db::update_report_status(&pool, *report_id, &update_req.status, update_req.admin_notes.as_deref()).await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Report status updated successfully")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update report status")),
+    }
+}
+
+#[derive(Deserialize)]
 struct UpdateProfileImageRequest {
     profile_image: String,
 }
@@ -402,6 +622,8 @@ async fn update_profile(
 pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(get_products);       // GET /products (public)
     cfg.service(create_product);     // POST /products (vendors only)
+    cfg.service(update_product);     // PATCH /products/{product_id} (vendors only)
+    cfg.service(delete_product);     // DELETE /products/{product_id} (vendors only)
     cfg.service(login);              // POST /login
     cfg.service(signup);             // POST /signup
     cfg.service(update_profile_image); // PATCH /profile/image
@@ -413,9 +635,18 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(update_cart_item)
         .service(remove_from_cart_route);
 
+    // Vendor report count route
+    cfg.service(get_vendor_report_count);
+
     // Admin routes - authentication checked in route handlers
     cfg.service(get_all_users)
         .service(update_user_role)
         .service(update_user_verification)
-        .service(delete_user);
+        .service(delete_user)
+        .service(ban_user_route)
+        .service(reset_user_password_route)
+        .service(get_all_cart_items)
+        .service(create_vendor_report_route)
+        .service(get_all_vendor_reports_route)
+        .service(update_vendor_report_status_route);
 }

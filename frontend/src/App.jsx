@@ -5,8 +5,17 @@ import Products from './components/Products';
 import Cart from './components/Cart';
 import Auth from './components/Auth';
 import VendorProfile from './components/VendorProfile';
+import VendorDashboard from './components/VendorDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import { useUser } from './components/UserContext';
 import './App.css';
+
+function VendorRoutes() {
+  const { user } = useUser();
+
+  // Show VendorDashboard for verified vendors, VendorProfile for others
+  return user?.verified ? <VendorDashboard /> : <VendorProfile />;
+}
 
 function App() {
   return (
@@ -18,7 +27,7 @@ function App() {
           <Route path="/products" element={<Products />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/vendor" element={<VendorProfile />} />
+          <Route path="/vendor" element={<VendorRoutes />} />
           <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </main>

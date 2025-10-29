@@ -21,7 +21,8 @@ pub async fn init_db() -> PgPool {
             password_hash VARCHAR(255) NOT NULL,
             role VARCHAR(50) NOT NULL DEFAULT 'Customer',
             profile_image TEXT,
-            verified BOOLEAN NOT NULL DEFAULT FALSE
+            verified BOOLEAN NOT NULL DEFAULT FALSE,
+            banned BOOLEAN NOT NULL DEFAULT FALSE
         )
         "#,
     )
@@ -63,6 +64,27 @@ pub async fn init_db() -> PgPool {
     .execute(&pool)
     .await
     .expect("Failed to create cart_items table");
+
+    // Create vendor_reports table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS vendor_reports (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES users(id),
+            vendor_id INTEGER NOT NULL REFERENCES users(id),
+            product_id INTEGER REFERENCES products(id),
+            report_type VARCHAR(50) NOT NULL, -- 'non_delivery', 'wrong_product', 'damaged_product', 'other'
+            description TEXT,
+            status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'investigating', 'resolved', 'dismissed'
+            admin_notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create vendor_reports table");
 
     // Create default admin user if not exists
     let admin_exists: (bool,) = sqlx::query_as(
@@ -111,7 +133,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(password_hash)
         .bind(role_str)
         .bind(image)
-        .bind(true)
+        .bind(false)  // Vendors are not auto-verified anymore
         .fetch_one(pool)
         .await?
     } else {
@@ -126,7 +148,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(email)
         .bind(password_hash)
         .bind(role_str)
-        .bind(false)
+        .bind(false)  // All new users start as unverified
         .fetch_one(pool)
         .await?
     };
@@ -143,6 +165,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         },
         profile_image: row.try_get(4)?,
         verified: row.try_get(5)?,
+        banned: false,
     };
 
     Ok(user)
@@ -179,6 +202,7 @@ pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) ->
         },
         profile_image: row.try_get(5)?,
         verified: row.try_get(6)?,
+        banned: false, // Default to false for legacy users
     };
 
     Ok(user)
@@ -206,8 +230,8 @@ pub async fn get_cart_items(pool: &PgPool, user_id: i32) -> Result<Vec<CartItem>
             name: row.try_get("name")?,
             price: row.try_get::<f64, _>("price")?,
             category: row.try_get("category")?,
-            description: row.try_get("description")?,
-            image: row.try_get("image")?,
+            description: row.try_get::<Option<String>, _>("description")?,
+            image: row.try_get::<Option<String>, _>("image")?,
             vendor_id: row.try_get::<i32, _>("vendor_id")? as u32,
         };
 
@@ -222,6 +246,167 @@ pub async fn get_cart_items(pool: &PgPool, user_id: i32) -> Result<Vec<CartItem>
     }
 
     Ok(cart_items)
+}
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct VendorReport {
+    pub id: i32,
+    pub customer_id: i32,
+    pub vendor_id: i32,
+    pub product_id: Option<i32>,
+    pub report_type: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub admin_notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub customer_username: String,
+    pub vendor_username: String,
+    pub product_name: Option<String>,
+}
+
+pub async fn create_vendor_report(
+    pool: &PgPool,
+    customer_id: i32,
+    vendor_id: i32,
+    product_id: Option<i32>,
+    report_type: &str,
+    description: Option<&str>
+) -> Result<VendorReport, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        INSERT INTO vendor_reports (customer_id, vendor_id, product_id, report_type, description)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id, customer_id, vendor_id, product_id, report_type, description, status, admin_notes,
+                  created_at, updated_at
+        "#,
+    )
+    .bind(customer_id)
+    .bind(vendor_id)
+    .bind(product_id)
+    .bind(report_type)
+    .bind(description)
+    .fetch_one(pool)
+    .await?;
+
+    // Get customer and vendor usernames, and product name if provided
+    let customer_username = sqlx::query_scalar(
+        "SELECT username FROM users WHERE id = $1"
+    )
+    .bind(customer_id)
+    .fetch_one(pool)
+    .await?;
+
+    let vendor_username = sqlx::query_scalar(
+        "SELECT username FROM users WHERE id = $1"
+    )
+    .bind(vendor_id)
+    .fetch_one(pool)
+    .await?;
+
+    let product_name = if let Some(pid) = product_id {
+        Some(sqlx::query_scalar!(
+            "SELECT name FROM products WHERE id = $1",
+            pid
+        )
+        .fetch_one(pool)
+        .await?)
+    } else {
+        None
+    };
+
+    Ok(VendorReport {
+        id: row.try_get("id")?,
+        customer_id: row.try_get("customer_id")?,
+        vendor_id: row.try_get("vendor_id")?,
+        product_id: row.try_get("product_id")?,
+        report_type: row.try_get("report_type")?,
+        description: row.try_get("description")?,
+        status: row.try_get("status")?,
+        admin_notes: row.try_get("admin_notes")?,
+        created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "?".to_string()),
+        updated_at: row.try_get::<String, _>("updated_at").unwrap_or_else(|_| "?".to_string()),
+        customer_username,
+        vendor_username,
+        product_name,
+    })
+}
+
+pub async fn count_vendor_reports(pool: &PgPool, vendor_id: i32) -> Result<i32, sqlx::Error> {
+    let row: (i32,) = sqlx::query_as(
+        "SELECT COUNT(*) as report_count FROM vendor_reports WHERE vendor_id = $1"
+    )
+    .bind(vendor_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
+pub async fn get_all_vendor_reports(pool: &PgPool) -> Result<Vec<VendorReport>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            vr.id, vr.customer_id, vr.vendor_id, vr.product_id, vr.report_type,
+            vr.description, vr.status, vr.admin_notes, vr.created_at, vr.updated_at,
+            cu.username as customer_username, vu.username as vendor_username,
+            p.name as product_name
+        FROM vendor_reports vr
+        JOIN users cu ON vr.customer_id = cu.id
+        JOIN users vu ON vr.vendor_id = vu.id
+        LEFT JOIN products p ON vr.product_id = p.id
+        ORDER BY vr.created_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut reports = Vec::new();
+    for row in rows {
+        reports.push(VendorReport {
+            id: row.try_get("id")?,
+            customer_id: row.try_get("customer_id")?,
+            vendor_id: row.try_get("vendor_id")?,
+            product_id: row.try_get("product_id")?,
+            report_type: row.try_get("report_type")?,
+            description: row.try_get("description")?,
+            status: row.try_get("status")?,
+            admin_notes: row.try_get("admin_notes")?,
+            created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "?".to_string()),
+            updated_at: row.try_get::<String, _>("updated_at").unwrap_or_else(|_| "?".to_string()),
+            customer_username: row.try_get("customer_username")?,
+            vendor_username: row.try_get("vendor_username")?,
+            product_name: row.try_get("product_name")?,
+        });
+    }
+
+    Ok(reports)
+}
+
+pub async fn update_report_status(
+    pool: &PgPool,
+    report_id: i32,
+    status: &str,
+    admin_notes: Option<&str>
+) -> Result<(), sqlx::Error> {
+    let query = if let Some(notes) = admin_notes {
+        sqlx::query(
+            "UPDATE vendor_reports SET status = $1, admin_notes = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3"
+        )
+        .bind(status)
+        .bind(notes)
+        .bind(report_id)
+    } else {
+        sqlx::query(
+            "UPDATE vendor_reports SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2"
+        )
+        .bind(status)
+        .bind(report_id)
+    };
+
+    query.execute(pool).await?;
+    Ok(())
 }
 
 pub async fn add_to_cart(pool: &PgPool, user_id: i32, product_id: i32, quantity: i32) -> Result<CartItem, sqlx::Error> {
@@ -268,8 +453,8 @@ pub async fn add_to_cart(pool: &PgPool, user_id: i32, product_id: i32, quantity:
             name: row.try_get("name")?,
             price: row.try_get::<f64, _>("price")?,
             category: row.try_get("category")?,
-            description: row.try_get("description")?,
-            image: row.try_get("image")?,
+            description: row.try_get::<Option<String>, _>("description")?,
+            image: row.try_get::<Option<String>, _>("image")?,
             vendor_id: row.try_get::<i32, _>("vendor_id")? as u32,
         };
 
@@ -307,8 +492,8 @@ pub async fn add_to_cart(pool: &PgPool, user_id: i32, product_id: i32, quantity:
             name: row.try_get("p_name")?,
             price: row.try_get::<f64, _>("p_price")?,
             category: row.try_get("p_category")?,
-            description: row.try_get("p_description")?,
-            image: row.try_get("p_image")?,
+            description: row.try_get::<Option<String>, _>("p_description")?,
+            image: row.try_get::<Option<String>, _>("p_image")?,
             vendor_id: row.try_get::<i32, _>("p_vendor_id")? as u32,
         };
 
@@ -350,8 +535,8 @@ pub async fn update_cart_item_quantity(pool: &PgPool, cart_item_id: i32, user_id
         name: row.try_get("p_name")?,
         price: row.try_get::<f64, _>("p_price")?,
         category: row.try_get("p_category")?,
-        description: row.try_get("p_description")?,
-        image: row.try_get("p_image")?,
+        description: row.try_get::<Option<String>, _>("p_description")?,
+        image: row.try_get::<Option<String>, _>("p_image")?,
         vendor_id: row.try_get::<i32, _>("p_vendor_id")? as u32,
     };
 
@@ -379,7 +564,7 @@ pub async fn remove_from_cart_with_user(pool: &PgPool, cart_item_id: i32, user_i
 pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, username, email, role, profile_image, verified
+        SELECT id, username, email, role, profile_image, verified, banned
         FROM users
         ORDER BY id
         "#,
@@ -401,6 +586,7 @@ pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> {
             },
             profile_image: row.try_get(4)?,
             verified: row.try_get(5)?,
+            banned: row.try_get(6)?,
         };
         users.push(user);
     }
@@ -431,6 +617,18 @@ pub async fn update_user_verification(pool: &PgPool, user_id: i32, verified: boo
         "UPDATE users SET verified = $1 WHERE id = $2",
     )
     .bind(verified)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn ban_user(pool: &PgPool, user_id: i32, banned: bool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET banned = $1 WHERE id = $2",
+    )
+    .bind(banned)
     .bind(user_id)
     .execute(pool)
     .await?;
@@ -474,6 +672,19 @@ pub async fn update_user_profile(pool: &PgPool, user_id: i32, new_username: Opti
     Ok(())
 }
 
+pub async fn reset_user_password(pool: &PgPool, user_id: i32, new_password: &str) -> Result<(), sqlx::Error> {
+    let password_hash = hash(new_password, DEFAULT_COST).map_err(|_| sqlx::Error::RowNotFound)?;
+
+    sqlx::query(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+    )
+    .bind(password_hash)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 pub async fn delete_user(pool: &PgPool, user_id: i32) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(user_id)
@@ -514,8 +725,8 @@ pub async fn get_all_products(pool: &PgPool, vendor_filter: Option<i32>) -> Resu
             name: row.try_get(1)?,
             price: row.try_get::<f64, _>(2)?,
             category: row.try_get(3)?,
-            description: row.try_get(4)?,
-            image: row.try_get(5)?,
+            description: row.try_get::<Option<String>, _>(4)?,
+            image: row.try_get::<Option<String>, _>(5)?,
             vendor_id: row.try_get::<i32, _>(6)? as u32,
         };
         products.push(product);
@@ -563,10 +774,111 @@ pub async fn create_product(pool: &PgPool, name: &str, price: f64, category: &st
         name: row.try_get(1)?,
         price: row.try_get::<f64, _>(2)?,
         category: row.try_get(3)?,
-        description: row.try_get(4)?,
-        image: row.try_get(5)?,
+        description: row.try_get::<Option<String>, _>(4)?,
+        image: row.try_get::<Option<String>, _>(5)?,
         vendor_id: row.try_get::<i32, _>(6)? as u32,
     };
 
     Ok(product)
+}
+
+pub async fn update_product(pool: &PgPool, product_id: i32, name: &str, price: f64, category: &str, description: &str, image: Option<&str>, vendor_id: i32) -> Result<Product, sqlx::Error> {
+    let row = if let Some(img) = image {
+        sqlx::query(
+            r#"
+            UPDATE products 
+            SET name = $1, price = $2, category = $3, description = $4, image = $5
+            WHERE id = $6 AND vendor_id = $7
+            RETURNING id, name, price, category, description, image, vendor_id
+            "#,
+        )
+        .bind(name)
+        .bind(price)
+        .bind(category)
+        .bind(description)
+        .bind(img)
+        .bind(product_id)
+        .bind(vendor_id)
+        .fetch_one(pool)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            UPDATE products 
+            SET name = $1, price = $2, category = $3, description = $4
+            WHERE id = $5 AND vendor_id = $6
+            RETURNING id, name, price, category, description, image, vendor_id
+            "#,
+        )
+        .bind(name)
+        .bind(price)
+        .bind(category)
+        .bind(description)
+        .bind(product_id)
+        .bind(vendor_id)
+        .fetch_one(pool)
+        .await?
+    };
+
+    let product = Product {
+        id: row.try_get::<i32, _>(0)? as u32,
+        name: row.try_get(1)?,
+        price: row.try_get::<f64, _>(2)?,
+        category: row.try_get(3)?,
+        description: row.try_get::<Option<String>, _>(4)?,
+        image: row.try_get::<Option<String>, _>(5)?,
+        vendor_id: row.try_get::<i32, _>(6)? as u32,
+    };
+
+    Ok(product)
+}
+
+pub async fn delete_product(pool: &PgPool, product_id: i32, vendor_id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM products WHERE id = $1 AND vendor_id = $2")
+        .bind(product_id)
+        .bind(vendor_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_all_cart_items(pool: &PgPool) -> Result<Vec<CartItem>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT
+            ci.id, ci.user_id, ci.product_id, ci.quantity,
+            p.id as p_id, p.name, p.price, p.category, p.description, p.image, p.vendor_id,
+            u.username as user_name
+        FROM cart_items ci
+        JOIN products p ON ci.product_id = p.id
+        JOIN users u ON ci.user_id = u.id
+        ORDER BY ci.updated_at DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut cart_items = Vec::new();
+    for row in rows {
+        let mut product = Product {
+            id: row.try_get::<i32, _>("p_id")? as u32,
+            name: row.try_get("name")?,
+            price: row.try_get::<f64, _>("price")?,
+            category: row.try_get("category")?,
+            description: row.try_get::<Option<String>, _>("description")?,
+            image: row.try_get::<Option<String>, _>("image")?,
+            vendor_id: row.try_get::<i32, _>("vendor_id")? as u32,
+        };
+
+        let cart_item = CartItem {
+            id: row.try_get("id")?,
+            user_id: row.try_get("user_id")?,
+            product_id: row.try_get("product_id")?,
+            quantity: row.try_get("quantity")?,
+            product,
+        };
+        cart_items.push(cart_item);
+    }
+
+    Ok(cart_items)
 }

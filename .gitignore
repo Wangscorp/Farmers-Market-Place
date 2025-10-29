@@ -54,6 +54,10 @@ target/  # Though specified in backend/.gitignore
 coverage/
 *.lcov
 
+# Supabase migration files
+SUPABASE_MIGRATION.md
+backend/.env.example
+
 # Test results
 test-results/
 playwright-report/

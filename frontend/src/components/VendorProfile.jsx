@@ -69,10 +69,14 @@ const VendorProfile = () => {
       <h2>Vendor Dashboard</h2>
       <p>Account Verified: {user?.verified ? "Yes" : "No"}</p>
 
-      <h3>Profile Image Verification</h3>
-      <p>Upload your profile image to get verified as a vendor:</p>
-      <ImageUploadWithResize onImageResize={handleImageResize} />
-      <button onClick={handleUpdateProfileImage}>Update Profile Image</button>
+      {!user?.verified && (
+        <>
+          <h3>Profile Image Verification</h3>
+          <p>Upload your profile image to get verified as a vendor:</p>
+          <ImageUploadWithResize onImageResize={handleImageResize} />
+          <button onClick={handleUpdateProfileImage}>Update Profile Image</button>
+        </>
+      )}
 
       <h3>Edit Profile Information</h3>
       <p>Update your username and email:</p>
@@ -101,7 +105,7 @@ const VendorProfile = () => {
         <div className="vendor-products-list">
           {products.map(product => (
             <div key={product.id} className="vendor-product-item">
-              {product.image && <img src={`data:image/jpeg;base64,${product.image}`} alt={product.name} className="vendor-product-image" />}
+              {product.image && <img src={product.image} alt={product.name} className="vendor-product-image" />}
               <div className="vendor-product-details">
                 <h4>{product.name}</h4>
                 <p>{product.description}</p>

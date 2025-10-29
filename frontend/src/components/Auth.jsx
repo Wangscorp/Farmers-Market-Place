@@ -63,11 +63,7 @@ const Auth = () => {
             return;
         }
 
-        // Require profile image for vendors
-        if (role === 'Vendor' && !resizedImage) {
-            alert('Profile image is required for vendor verification');
-            return;
-        }
+        // Profile image is no longer required for signup
 
         try {
             const response = await axios.post('/signup', {
@@ -164,7 +160,6 @@ const Auth = () => {
       <button onClick={toggleMode} className="toggle-btn">
         {isLogin ? 'Need an account? Sign Up' : 'Have an account? Login'}
       </button>
-      <p>Demo: user/pass, admin: admin/admin123</p>
     </div>
   );
 };
