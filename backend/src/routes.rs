@@ -389,7 +389,7 @@ async fn update_user_verification(
 
     match db::update_user_verification(&pool, *user_id, request.verified).await {
         Ok(_) => Ok(HttpResponse::Ok().json("Verification status updated successfully")),
-        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update verification")),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to update verification: {:?}", e))),
     }
 }
 
