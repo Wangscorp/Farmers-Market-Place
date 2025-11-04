@@ -56,7 +56,6 @@ coverage/
 
 # Supabase migration files
 SUPABASE_MIGRATION.md
-backend/.env.example
 
 # Test results
 test-results/

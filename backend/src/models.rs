@@ -99,6 +99,19 @@ pub struct UpdateUserVerificationRequest {
     pub verified: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct CheckoutRequest {
+    pub mpesa_number: String,
+    pub total_amount: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CheckoutResponse {
+    pub transaction_id: String,
+    pub message: String,
+    pub status: String,
+}
+
 // JWT utilities
 const JWT_SECRET: &str = "your-secret-key"; // In production, use env var
 

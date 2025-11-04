@@ -7,7 +7,7 @@
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::PgPool;
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest};
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, CheckoutRequest, CheckoutResponse};
 use crate::db;  // Database helper functions
 use serde::Deserialize;
 use serde_json::json;
@@ -292,6 +292,72 @@ async fn remove_from_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgP
     }
 }
 
+/**
+ * POST /checkout - Process M-Pesa payment
+ *
+ * Initiates M-Pesa payment for the authenticated customer's cart items.
+ * In production, this would integrate with M-Pesa API for STK Push.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param checkout_req - JSON request with M-Pesa number and total amount
+ * @returns JSON response with transaction details
+ */
+#[post("/checkout")]
+async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout_req: web::Json<CheckoutRequest>) -> ActixResult<HttpResponse> {
+    let user_id = match check_customer_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    // Validate M-Pesa number format (Kenyan format: 07XXXXXXXX)
+    if !checkout_req.mpesa_number.starts_with("07") || checkout_req.mpesa_number.len() != 10 {
+        return Ok(HttpResponse::BadRequest().json("Invalid M-Pesa number format. Must be 07XXXXXXXX"));
+    }
+
+    // Get user's cart items to verify they have items
+    match db::get_cart_items(&pool, user_id).await {
+        Ok(cart_items) => {
+            if cart_items.is_empty() {
+                return Ok(HttpResponse::BadRequest().json("Cart is empty"));
+            }
+
+            // Calculate total from cart items to verify with request
+            let calculated_total: f64 = cart_items.iter()
+                .map(|item| item.product.price * item.quantity as f64)
+                .sum();
+
+            // Allow small floating point differences
+            if (calculated_total - checkout_req.total_amount).abs() > 0.01 {
+                return Ok(HttpResponse::BadRequest().json("Total amount mismatch"));
+            }
+
+            // Generate transaction ID (in production, this would come from M-Pesa)
+            let transaction_id = format!("TXN_{}_{}", user_id, chrono::Utc::now().timestamp());
+
+            // In a real implementation, you would:
+            // 1. Call M-Pesa STK Push API
+            // 2. Store transaction in database
+            // 3. Handle payment confirmation callback
+            // 4. Clear cart only after successful payment
+
+            // For demo purposes, simulate successful payment initiation
+            let response = CheckoutResponse {
+                transaction_id: transaction_id.clone(),
+                message: "M-Pesa payment initiated. Check your phone for the STK push prompt.".to_string(),
+                status: "initiated".to_string(),
+            };
+
+            // Log the transaction (in production, save to database)
+            println!("M-Pesa payment initiated - User: {}, Phone: {}, Amount: {:.2}, Transaction: {}",
+                    user_id, checkout_req.mpesa_number, checkout_req.total_amount, transaction_id);
+
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch cart items")),
+    }
+}
+
 // Auth helpers
 fn extract_auth(req: &actix_web::HttpRequest) -> Result<Claims, HttpResponse> {
     let auth_header = req.headers().get(AUTHORIZATION);
@@ -429,11 +495,6 @@ async fn ban_user_route(
         Ok(_) => Ok(HttpResponse::Ok().json(if request.banned { "User banned successfully" } else { "User unbanned successfully" })),
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update ban status")),
     }
-}
-
-#[derive(Deserialize)]
-struct ResetPasswordRequest {
-    new_password: String,
 }
 
 #[patch("/api/admin/users/{user_id}/reset-password")]
@@ -633,7 +694,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(get_cart)
         .service(add_to_cart_route)
         .service(update_cart_item)
-        .service(remove_from_cart_route);
+        .service(remove_from_cart_route)
+        .service(checkout);
 
     // Vendor report count route
     cfg.service(get_vendor_report_count);

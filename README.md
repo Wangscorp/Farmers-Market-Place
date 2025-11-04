@@ -228,12 +228,33 @@ Railway provides free tier with PostgreSQL database.
 
 - Backend: Heroku, Railway, or any cloud provider with Rust support
 - Frontend: Netlify, GitHub Pages, or any static hosting
-## Default Credentials
+## Sample Data & Testing
 
-A default admin user is created automatically:
+The application automatically creates sample data on first run for testing purposes:
 
-- Username: `admin`
-- Password: `admin123`
+### Sample Users
+- **Admin**: username: `admin`, password: `admin123`
+- **Vendor 1**: username: `farmer_john`, password: `vendor123`
+- **Vendor 2**: username: `organic_mary`, password: `vendor123`
+- **Customer**: username: `customer_alice`, password: `customer123`
+
+### Sample Products
+- Fresh Tomatoes (KSh 50) - farmer_john
+- Bananas (KSh 30) - farmer_john
+- Spinach Bundle (KSh 25) - farmer_john
+- Carrots (KSh 40) - farmer_john
+- Avocados (KSh 80) - organic_mary
+- Oranges (KSh 35) - organic_mary
+- Kale (KSh 45) - organic_mary
+- Apples (KSh 60) - organic_mary
+
+### Testing M-Pesa Payment
+
+1. Log in as `customer_alice` (password: `customer123`)
+2. Add some products to your cart from the marketplace
+3. Go to your cart and enter a M-Pesa number (format: 07XXXXXXXX, e.g., 0712345678)
+4. Click "Pay with M-Pesa"
+5. The system will simulate payment initiation and show a transaction ID
 
 ## Available Scripts
 

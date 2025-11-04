@@ -109,6 +109,282 @@ pub async fn init_db() -> PgPool {
         .expect("Failed to create default admin user");
     }
 
+    // Create sample vendors if not exists
+    let vendor1_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("farmer_john")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !vendor1_exists.0 {
+        let vendor1_hash = hash("vendor123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("farmer_john")
+        .bind("john@farmers.com")
+        .bind(vendor1_hash)
+        .bind("Vendor")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample vendor 1");
+    }
+
+    let vendor2_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("organic_mary")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !vendor2_exists.0 {
+        let vendor2_hash = hash("vendor123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("organic_mary")
+        .bind("mary@organic.com")
+        .bind(vendor2_hash)
+        .bind("Vendor")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample vendor 2");
+    }
+
+    let vendor3_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("green_grocer_sam")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !vendor3_exists.0 {
+        let vendor3_hash = hash("vendor123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("green_grocer_sam")
+        .bind("sam@greengrocer.com")
+        .bind(vendor3_hash)
+        .bind("Vendor")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample vendor 3");
+    }
+
+    let vendor4_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("fresh_farm_lisa")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !vendor4_exists.0 {
+        let vendor4_hash = hash("vendor123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("fresh_farm_lisa")
+        .bind("lisa@freshfarm.com")
+        .bind(vendor4_hash)
+        .bind("Vendor")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample vendor 4");
+    }
+
+    // Create sample customers if not exists
+    let customer1_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("customer_alice")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !customer1_exists.0 {
+        let customer1_hash = hash("customer123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("customer_alice")
+        .bind("alice@email.com")
+        .bind(customer1_hash)
+        .bind("Customer")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample customer 1");
+    }
+
+    let customer2_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("shopper_bob")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !customer2_exists.0 {
+        let customer2_hash = hash("customer123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("shopper_bob")
+        .bind("bob@shopper.com")
+        .bind(customer2_hash)
+        .bind("Customer")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample customer 2");
+    }
+
+    let customer3_exists: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
+    )
+    .bind("buyer_charlie")
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !customer3_exists.0 {
+        let customer3_hash = hash("customer123", DEFAULT_COST).unwrap();
+        sqlx::query(
+            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind("buyer_charlie")
+        .bind("charlie@buyer.com")
+        .bind(customer3_hash)
+        .bind("Customer")
+        .bind(true)
+        .execute(&pool)
+        .await
+        .expect("Failed to create sample customer 3");
+    }
+
+    // Create sample products if not exists
+    let products_exist: (bool,) = sqlx::query_as(
+        "SELECT EXISTS(SELECT 1 FROM products LIMIT 1)",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap_or((false,));
+
+    if !products_exist.0 {
+        // Get vendor IDs
+        let farmer_john_id: (i32,) = sqlx::query_as(
+            "SELECT id FROM users WHERE username = $1",
+        )
+        .bind("farmer_john")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to get farmer_john ID");
+
+        let organic_mary_id: (i32,) = sqlx::query_as(
+            "SELECT id FROM users WHERE username = $1",
+        )
+        .bind("organic_mary")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to get organic_mary ID");
+
+        let green_grocer_sam_id: (i32,) = sqlx::query_as(
+            "SELECT id FROM users WHERE username = $1",
+        )
+        .bind("green_grocer_sam")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to get green_grocer_sam ID");
+
+        let fresh_farm_lisa_id: (i32,) = sqlx::query_as(
+            "SELECT id FROM users WHERE username = $1",
+        )
+        .bind("fresh_farm_lisa")
+        .fetch_one(&pool)
+        .await
+        .expect("Failed to get fresh_farm_lisa ID");
+
+        // Sample products with varied categories and descriptions
+        let products_data = vec![
+            ("Fresh Tomatoes", 50.0, "Vegetables", "Organic red tomatoes, perfect for salads and cooking", farmer_john_id.0),
+            ("Bananas", 30.0, "Fruits", "Sweet, ripe bananas from local farms", farmer_john_id.0),
+            ("Spinach Bundle", 25.0, "Vegetables", "Fresh green spinach leaves, rich in nutrients", farmer_john_id.0),
+            ("Carrots", 40.0, "Vegetables", "Crunchy orange carrots, great for snacking", farmer_john_id.0),
+            ("Avocados", 80.0, "Fruits", "Creamy avocados, perfect for guacamole", organic_mary_id.0),
+            ("Oranges", 35.0, "Fruits", "Juicy navel oranges, rich in vitamin C", organic_mary_id.0),
+            ("Kale", 45.0, "Vegetables", "Nutrient-dense kale leaves, superfood", organic_mary_id.0),
+            ("Apples", 60.0, "Fruits", "Crisp red apples, perfect for eating fresh", organic_mary_id.0),
+            ("Broccoli", 55.0, "Vegetables", "Fresh broccoli florets, excellent source of vitamins", green_grocer_sam_id.0),
+            ("Strawberries", 90.0, "Fruits", "Sweet and juicy strawberries, perfect for desserts", green_grocer_sam_id.0),
+            ("Bell Peppers", 65.0, "Vegetables", "Colorful bell peppers, great for stir-fries", green_grocer_sam_id.0),
+            ("Grapes", 75.0, "Fruits", "Seedless grapes, naturally sweet and refreshing", green_grocer_sam_id.0),
+            ("Zucchini", 35.0, "Vegetables", "Fresh zucchini, versatile for cooking", fresh_farm_lisa_id.0),
+            ("Blueberries", 120.0, "Fruits", "Antioxidant-rich blueberries, perfect for smoothies", fresh_farm_lisa_id.0),
+            ("Eggplant", 45.0, "Vegetables", "Purple eggplant, ideal for Mediterranean dishes", fresh_farm_lisa_id.0),
+            ("Pineapples", 85.0, "Fruits", "Sweet tropical pineapples, great for fresh eating", fresh_farm_lisa_id.0),
+            ("Cucumbers", 30.0, "Vegetables", "Cool and crisp cucumbers, perfect for salads", farmer_john_id.0),
+            ("Mangoes", 95.0, "Fruits", "Juicy mangoes, tropical delight", organic_mary_id.0),
+            ("Lettuce", 20.0, "Vegetables", "Fresh lettuce leaves, essential for sandwiches", green_grocer_sam_id.0),
+            ("Pears", 70.0, "Fruits", "Sweet and crunchy pears, perfect for snacking", fresh_farm_lisa_id.0),
+            ("Potatoes", 25.0, "Vegetables", "Versatile potatoes, great for many dishes", farmer_john_id.0),
+            ("Kiwi", 40.0, "Fruits", "Tangy kiwi fruits, rich in vitamin C", organic_mary_id.0),
+            ("Cauliflower", 50.0, "Vegetables", "Fresh cauliflower, low-carb vegetable option", green_grocer_sam_id.0),
+            ("Watermelon", 150.0, "Fruits", "Large watermelon, refreshing summer fruit", fresh_farm_lisa_id.0),
+        ];
+
+        for (name, price, category, description, vendor_id) in products_data {
+            // Add base64 encoded placeholder images for some products
+            let image = match name {
+                "Fresh Tomatoes" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2ZmMDAwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkYiPC90ZXh0Pjwvc3ZnPg=="),
+                "Bananas" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2ZmZmYwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0iYmxhY2siIHRleHQtYW5jaG9yPSJtaWRkbGUiPkIiPC90ZXh0Pjwvc3ZnPg=="),
+                "Avocados" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzAwODAwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkEiPC90ZXh0Pjwvc3ZnPg=="),
+                "Oranges" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2ZmYTUwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk8iPC90ZXh0Pjwvc3ZnPg=="),
+                "Apples" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2ZmMDAwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkEiPC90ZXh0Pjwvc3ZnPg=="),
+                "Strawberries" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iI2RjMTQzNiIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlMiPC90ZXh0Pjwvc3ZnPg=="),
+                "Blueberries" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzAwMDA4MCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkIiPC90ZXh0Pjwvc3ZnPg=="),
+                "Watermelon" => Some("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzAwZmYwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxNCIgZmlsbD0iYmxhY2siIHRleHQtYW5jaG9yPSJtaWRkbGUiPlciPC90ZXh0Pjwvc3ZnPg=="),
+                _ => None,
+            };
+
+            if let Some(img) = image {
+                sqlx::query(
+                    "INSERT INTO products (name, price, category, description, image, vendor_id) VALUES ($1, $2, $3, $4, $5, $6)",
+                )
+                .bind(name)
+                .bind(price)
+                .bind(category)
+                .bind(description)
+                .bind(img)
+                .bind(vendor_id)
+                .execute(&pool)
+                .await
+                .expect("Failed to create sample product");
+            } else {
+                sqlx::query(
+                    "INSERT INTO products (name, price, category, description, vendor_id) VALUES ($1, $2, $3, $4, $5)",
+                )
+                .bind(name)
+                .bind(price)
+                .bind(category)
+                .bind(description)
+                .bind(vendor_id)
+                .execute(&pool)
+                .await
+                .expect("Failed to create sample product");
+            }
+        }
+    }
+
     pool
 }
 
@@ -709,9 +985,11 @@ pub async fn get_all_products(pool: &PgPool, vendor_filter: Option<i32>) -> Resu
     } else {
         sqlx::query(
             r#"
-            SELECT id, name, price, category, description, image, vendor_id
-            FROM products
-            ORDER BY id
+            SELECT p.id, p.name, p.price, p.category, p.description, p.image, p.vendor_id
+            FROM products p
+            JOIN users u ON p.vendor_id = u.id
+            WHERE u.verified = TRUE
+            ORDER BY p.id
             "#,
         )
         .fetch_all(pool)
@@ -860,7 +1138,7 @@ pub async fn get_all_cart_items(pool: &PgPool) -> Result<Vec<CartItem>, sqlx::Er
 
     let mut cart_items = Vec::new();
     for row in rows {
-        let mut product = Product {
+        let product = Product {
             id: row.try_get::<i32, _>("p_id")? as u32,
             name: row.try_get("name")?,
             price: row.try_get::<f64, _>("price")?,

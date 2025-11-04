@@ -68,11 +68,11 @@ const Products = () => {
       <div className="products-list">
         {products.map(product => (
           <div key={product.id} className="product-item">
-            {product.image && <img src={`data:image/jpeg;base64,${product.image}`} alt={product.name} className="product-image" />}
+            {product.image && <img src={product.image} alt={product.name} className="product-image" />}
             <h3>{product.name}</h3>
             <p>{product.description}</p>
-            <p>Price: KSh {product.price.toLocaleString()}</p>
-            <p>Category: {product.category}</p>
+            <p className="price">KSh {product.price.toLocaleString()}</p>
+            <p className="category">{product.category}</p>
             <div className="product-actions">
               <button onClick={() => handleAddToCart(product)}>Add to Cart</button>
               {user && user.role === 'Customer' && (
