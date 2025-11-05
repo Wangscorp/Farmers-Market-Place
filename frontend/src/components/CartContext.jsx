@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import axios from '../api';
+import { createContext, useContext, useState, useEffect } from "react";
+import axios from "../api";
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const CartContext = createContext();
@@ -8,7 +8,7 @@ export const CartContext = createContext();
 export const useCart = () => {
   const context = useContext(CartContext);
   if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
+    throw new Error("useCart must be used within a CartProvider");
   }
   return context;
 };
@@ -25,10 +25,10 @@ export const CartProvider = ({ children }) => {
   const loadCartItems = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/cart');
+      const response = await axios.get("/cart");
       setCartItems(response.data);
     } catch (error) {
-      console.error('Error loading cart:', error);
+      console.error("Error loading cart:", error);
       // For now, keep empty cart on error
     } finally {
       setLoading(false);
@@ -37,13 +37,13 @@ export const CartProvider = ({ children }) => {
 
   const addToCart = async (product) => {
     try {
-      const response = await axios.post('/cart', {
+      const response = await axios.post("/cart", {
         product_id: product.id,
-        quantity: 1
+        quantity: 1,
       });
-      setCartItems(prev => [...prev, response.data]);
+      setCartItems((prev) => [...prev, response.data]);
     } catch (error) {
-      console.error('Error adding to cart:', error);
+      console.error("Error adding to cart:", error);
       throw error;
     }
   };
@@ -51,9 +51,9 @@ export const CartProvider = ({ children }) => {
   const removeFromCart = async (itemId) => {
     try {
       await axios.delete(`/cart/${itemId}`);
-      setCartItems(prev => prev.filter(item => item.id !== itemId));
+      setCartItems((prev) => prev.filter((item) => item.id !== itemId));
     } catch (error) {
-      console.error('Error removing from cart:', error);
+      console.error("Error removing from cart:", error);
       throw error;
     }
   };
@@ -65,17 +65,20 @@ export const CartProvider = ({ children }) => {
         return;
       }
       const response = await axios.put(`/cart/${itemId}`, { quantity });
-      setCartItems(prev => prev.map(item =>
-        item.id === itemId ? response.data : item
-      ));
+      setCartItems((prev) =>
+        prev.map((item) => (item.id === itemId ? response.data : item))
+      );
     } catch (error) {
-      console.error('Error updating quantity:', error);
+      console.error("Error updating quantity:", error);
       throw error;
     }
   };
 
   const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => total + (item.product.price * item.quantity), 0);
+    return cartItems.reduce(
+      (total, item) => total + item.product.price * item.quantity,
+      0
+    );
   };
 
   const getTotalItems = () => {
@@ -83,16 +86,18 @@ export const CartProvider = ({ children }) => {
   };
 
   return (
-    <CartContext.Provider value={{
-      cartItems,
-      loading,
-      addToCart,
-      removeFromCart,
-      updateQuantity,
-      getTotalPrice,
-      getTotalItems,
-      loadCartItems
-    }}>
+    <CartContext.Provider
+      value={{
+        cartItems,
+        loading,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        getTotalPrice,
+        getTotalItems,
+        loadCartItems,
+      }}
+    >
       {children}
     </CartContext.Provider>
   );
