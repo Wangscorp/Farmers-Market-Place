@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from '../api';
-import { useUser } from './UserContext';
+import { useUser } from '../hooks/useUserHook';
 import ImageUploadWithResize from './ImageUploadWithResize';
 import './VendorProfile.css';
 

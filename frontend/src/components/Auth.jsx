@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api';  // Configured axios instance with base URL
-import { useUser } from './UserContext';  // React context for user state management
+import { useUser } from '../hooks/useUserHook';  // React context for user state management
 import ImageUploadWithResize from './ImageUploadWithResize';  // Image compression component
 import './Auth.css';
 

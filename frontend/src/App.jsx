@@ -7,7 +7,7 @@ import Auth from './components/Auth';
 import VendorProfile from './components/VendorProfile';
 import VendorDashboard from './components/VendorDashboard';
 import AdminDashboard from './components/AdminDashboard';
-import { useUser } from './components/UserContext';
+import { useUser } from './hooks/useUserHook';
 import './App.css';
 
 function VendorRoutes() {

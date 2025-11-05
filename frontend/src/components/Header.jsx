@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useUser } from './UserContext';
+import { useUser } from '../hooks/useUserHook';
 import './Header.css';
 
 const Header = () => {

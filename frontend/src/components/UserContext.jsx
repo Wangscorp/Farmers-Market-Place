@@ -1,9 +1,4 @@
-/**
- * User Context Provider - Re-export for compatibility
- *
- * Re-exports the UserProvider component from the hooks directory.
- * This file is kept for backward compatibility with existing imports.
- */
+import { createContext } from 'react';
 
-// eslint-disable-next-line react-refresh/only-export-components
-export { UserProvider, useUser } from '../hooks/useUser';
+// Create context for sharing user state
+export const UserContext = createContext();

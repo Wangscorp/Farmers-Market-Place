@@ -6,6 +6,7 @@ const Cart = () => {
   const { cartItems, removeFromCart, updateQuantity, getTotalPrice, loading } =
     useCart();
   const [mpesaNumber, setMpesaNumber] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("mpesa"); // "mpesa" or "delivery"
 
   const handleRemoveFromCart = async (itemId) => {
     try {
@@ -123,33 +124,67 @@ const Cart = () => {
         </div>
       )}
       <div className="payment-options">
-        <h3>M-Pesa Payment</h3>
-        <div className="mpesa-input">
-          <label htmlFor="mpesa-number">Enter your M-Pesa phone number:</label>
-          <input
-            id="mpesa-number"
-            type="tel"
-            placeholder="07XXXXXXXX"
-            value={mpesaNumber}
-            onChange={(e) => setMpesaNumber(e.target.value)}
-            pattern="^07\d{8}$"
-            title="Please enter a valid Kenyan phone number starting with 07 (10 digits total)"
-            required
-          />
-          <small>Format: 07XXXXXXXX (10 digits)</small>
+        <h3>Choose Payment Method</h3>
+        <div className="payment-methods">
+          <div
+            className={`payment-method ${paymentMethod === "mpesa" ? "selected" : ""}`}
+            onClick={() => setPaymentMethod("mpesa")}
+          >
+            <div className="payment-icon">💳</div>
+            <div className="payment-details">
+              <h4>Pay Now</h4>
+              <p>M-Pesa</p>
+            </div>
+          </div>
+          <div
+            className={`payment-method ${paymentMethod === "delivery" ? "selected" : ""}`}
+            onClick={() => setPaymentMethod("delivery")}
+          >
+            <div className="payment-icon">🚚</div>
+            <div className="payment-details">
+              <h4>Pay on Delivery</h4>
+              <p>Cash on delivery</p>
+            </div>
+          </div>
         </div>
+        {paymentMethod === "mpesa" && (
+          <div className="mpesa-input">
+            <label htmlFor="mpesa-number">Enter your M-Pesa phone number:</label>
+            <input
+              id="mpesa-number"
+              type="tel"
+              placeholder="07XXXXXXXX"
+              value={mpesaNumber}
+              onChange={(e) => setMpesaNumber(e.target.value)}
+              pattern="^07\d{8}$"
+              title="Please enter a valid Kenyan phone number starting with 07 (10 digits total)"
+              required
+            />
+            <small>Format: 07XXXXXXXX (10 digits)</small>
+          </div>
+        )}
       </div>
-      <button
-        className="checkout-button"
-        disabled={
-          cartItems.length === 0 ||
-          !mpesaNumber ||
-          !/^07\d{8}$/.test(mpesaNumber)
-        }
-        onClick={() => handleCheckout()}
-      >
-        Pay with M-Pesa
-      </button>
+      {paymentMethod === "mpesa" ? (
+        <button
+          className="checkout-button"
+          disabled={
+            cartItems.length === 0 ||
+            !mpesaNumber ||
+            !/^07\d{8}$/.test(mpesaNumber)
+          }
+          onClick={() => handleCheckout()}
+        >
+          Pay with M-Pesa
+        </button>
+      ) : (
+        <button
+          className="checkout-button"
+          disabled={cartItems.length === 0}
+          onClick={() => alert("Order placed! Please pay on delivery.")}
+        >
+          Pay on Delivery
+        </button>
+      )}
     </div>
   );
 };
