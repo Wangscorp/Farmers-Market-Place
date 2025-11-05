@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from '../api';
 import { useCart } from './CartContext';
-import { useUser } from './UserContext';
+import { useUser } from '../hooks/useUserHook';
 import './Products.css';
 
 const Products = () => {

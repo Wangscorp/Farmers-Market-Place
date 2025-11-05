@@ -1,7 +1,7 @@
 import CustomerDashboard from './CustomerDashboard';
 import VendorDashboard from './VendorDashboard';
 import AdminDashboard from './AdminDashboard';
-import { useUser } from './UserContext';
+import { useUser } from '../hooks/useUserHook';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
 

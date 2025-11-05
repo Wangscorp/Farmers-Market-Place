@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from '../api';
 import ImageUploadWithResize from './ImageUploadWithResize';
-import { useUser } from './UserContext';
+import { useUser } from '../hooks/useUserHook';
 import './VendorDashboard.css';
 
 const VendorDashboard = () => {
