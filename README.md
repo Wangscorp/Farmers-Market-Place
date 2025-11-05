@@ -233,20 +233,56 @@ Railway provides free tier with PostgreSQL database.
 The application automatically creates sample data on first run for testing purposes:
 
 ### Sample Users
-- **Admin**: username: `admin`, password: `admin123`
-- **Vendor 1**: username: `farmer_john`, password: `vendor123`
-- **Vendor 2**: username: `organic_mary`, password: `vendor123`
-- **Customer**: username: `customer_alice`, password: `customer123`
+
+**Admin Account:**
+- username: `admin`, password: `admin123`
+
+**Vendor Accounts (all verified):**
+- username: `farmer_john`, password: `vendor123`
+- username: `organic_mary`, password: `vendor123`
+- username: `green_grocer_sam`, password: `vendor123`
+- username: `fresh_farm_lisa`, password: `vendor123`
+
+**Customer Accounts (all verified):**
+- username: `customer_alice`, password: `customer123`
+- username: `shopper_bob`, password: `customer123`
+- username: `buyer_charlie`, password: `customer123`
 
 ### Sample Products
-- Fresh Tomatoes (KSh 50) - farmer_john
-- Bananas (KSh 30) - farmer_john
-- Spinach Bundle (KSh 25) - farmer_john
-- Carrots (KSh 40) - farmer_john
-- Avocados (KSh 80) - organic_mary
-- Oranges (KSh 35) - organic_mary
-- Kale (KSh 45) - organic_mary
-- Apples (KSh 60) - organic_mary
+
+The application creates 24 sample products across 4 vendors:
+
+**farmer_john's Products:**
+- Fresh Tomatoes (KSh 50) - Organic red tomatoes, perfect for salads and cooking
+- Bananas (KSh 30) - Sweet, ripe bananas from local farms
+- Spinach Bundle (KSh 25) - Fresh green spinach leaves, rich in nutrients
+- Carrots (KSh 40) - Crunchy orange carrots, great for snacking
+- Cucumbers (KSh 30) - Cool and crisp cucumbers, perfect for salads
+- Potatoes (KSh 25) - Versatile potatoes, great for many dishes
+
+**organic_mary's Products:**
+- Avocados (KSh 80) - Creamy avocados, perfect for guacamole
+- Oranges (KSh 35) - Juicy navel oranges, rich in vitamin C
+- Kale (KSh 45) - Nutrient-dense kale leaves, superfood
+- Apples (KSh 60) - Crisp red apples, perfect for eating fresh
+- Mangoes (KSh 95) - Juicy mangoes, tropical delight
+- Kiwi (KSh 40) - Tangy kiwi fruits, rich in vitamin C
+
+**green_grocer_sam's Products:**
+- Broccoli (KSh 55) - Fresh broccoli florets, excellent source of vitamins
+- Strawberries (KSh 90) - Sweet and juicy strawberries, perfect for desserts
+- Bell Peppers (KSh 65) - Colorful bell peppers, great for stir-fries
+- Grapes (KSh 75) - Seedless grapes, naturally sweet and refreshing
+- Lettuce (KSh 20) - Fresh lettuce leaves, essential for sandwiches
+- Cauliflower (KSh 50) - Fresh cauliflower, low-carb vegetable option
+
+**fresh_farm_lisa's Products:**
+- Zucchini (KSh 35) - Fresh zucchini, versatile for cooking
+- Blueberries (KSh 120) - Antioxidant-rich blueberries, perfect for smoothies
+- Eggplant (KSh 45) - Purple eggplant, ideal for Mediterranean dishes
+- Pineapples (KSh 85) - Sweet tropical pineapples, great for fresh eating
+- Pears (KSh 70) - Sweet and crunchy pears, perfect for snacking
+- Watermelon (KSh 150) - Large watermelon, refreshing summer fruit
 
 ### Testing M-Pesa Payment
 
