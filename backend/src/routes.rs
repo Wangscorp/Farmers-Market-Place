@@ -6,10 +6,10 @@
  */
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, CheckoutRequest, CheckoutResponse};
 use crate::db;  // Database helper functions
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 /**
@@ -615,6 +615,253 @@ async fn update_vendor_report_status_route(
     }
 }
 
+#[derive(Serialize)]
+struct DatabaseInfo {
+    name: String,
+    owner: String,
+    encoding: String,
+}
+
+#[get("/api/admin/databases")]
+async fn get_databases(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    // Query to get database information
+    let rows = match sqlx::query(
+        "SELECT datname, usename as owner, encoding, datcollate
+         FROM pg_database d
+         JOIN pg_user u ON d.datdba = u.usesysid
+         WHERE datistemplate = false
+         ORDER BY datname"
+    )
+    .fetch_all(pool.get_ref())
+    .await {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to fetch databases")),
+    };
+
+    let mut databases = Vec::new();
+    for row in rows {
+        let name: String = match row.try_get("datname") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let owner: String = match row.try_get("owner") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let encoding: String = match row.try_get("encoding") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        databases.push(DatabaseInfo { name, owner, encoding });
+    }
+
+    Ok(HttpResponse::Ok().json(databases))
+}
+
+#[derive(Serialize)]
+struct TableInfo {
+    name: String,
+    schema: String,
+    table_type: String,
+    owner: String,
+}
+
+#[get("/api/admin/tables")]
+async fn get_tables(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    // Query to get table information
+    let rows = match sqlx::query(
+        "SELECT schemaname, tablename, tableowner, 'table' as table_type
+         FROM pg_tables
+         WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+         ORDER BY schemaname, tablename"
+    )
+    .fetch_all(pool.get_ref())
+    .await {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to fetch tables")),
+    };
+
+    let mut tables = Vec::new();
+    for row in rows {
+        let schema: String = match row.try_get("schemaname") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let name: String = match row.try_get("tablename") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let owner: String = match row.try_get("tableowner") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let table_type: String = match row.try_get("table_type") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        tables.push(TableInfo { name, schema, table_type, owner });
+    }
+
+    Ok(HttpResponse::Ok().json(tables))
+}
+
+#[derive(Serialize)]
+struct ColumnInfo {
+    name: String,
+    data_type: String,
+    is_nullable: String,
+    default_value: Option<String>,
+}
+
+#[get("/api/admin/tables/{table_name}/columns")]
+async fn get_table_columns(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    table_name: web::Path<String>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    // Query to get column information for a specific table
+    let rows = match sqlx::query(
+        "SELECT column_name, data_type, is_nullable, column_default
+         FROM information_schema.columns
+         WHERE table_name = $1 AND table_schema = 'public'
+         ORDER BY ordinal_position"
+    )
+    .bind(&*table_name)
+    .fetch_all(pool.get_ref())
+    .await {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to fetch table columns")),
+    };
+
+    let mut columns = Vec::new();
+    for row in rows {
+        let name: String = match row.try_get("column_name") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let data_type: String = match row.try_get("data_type") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let is_nullable: String = match row.try_get("is_nullable") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        let default_value: Option<String> = match row.try_get("column_default") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        columns.push(ColumnInfo { name, data_type, is_nullable, default_value });
+    }
+
+    Ok(HttpResponse::Ok().json(columns))
+}
+
+#[derive(Serialize)]
+struct TableData {
+    columns: Vec<String>,
+    rows: Vec<Vec<serde_json::Value>>,
+}
+
+#[get("/api/admin/tables/{table_name}/data")]
+async fn get_table_data(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    table_name: web::Path<String>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    // First get column names
+    let column_rows = match sqlx::query(
+        "SELECT column_name
+         FROM information_schema.columns
+         WHERE table_name = $1 AND table_schema = 'public'
+         ORDER BY ordinal_position"
+    )
+    .bind(&*table_name)
+    .fetch_all(pool.get_ref())
+    .await {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to fetch column names")),
+    };
+
+    let mut columns = Vec::new();
+    for row in &column_rows {
+        let column_name: String = match row.try_get("column_name") {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        columns.push(column_name);
+    }
+
+    // Build dynamic SELECT query
+    if columns.is_empty() {
+        return Ok(HttpResponse::Ok().json(TableData { columns: vec![], rows: vec![] }));
+    }
+
+    let select_clause = columns.join(", ");
+    let query_str = format!("SELECT {} FROM {} LIMIT 100", select_clause, table_name);
+
+    // Execute the dynamic query
+    let data_rows = match sqlx::query(&query_str)
+        .fetch_all(pool.get_ref())
+        .await {
+        Ok(rows) => rows,
+        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to fetch table data")),
+    };
+
+    let mut rows = Vec::new();
+    for data_row in data_rows {
+        let mut row_data = Vec::new();
+        for (i, _col) in columns.iter().enumerate() {
+            // Convert each value to JSON
+            let value: serde_json::Value = match data_row.try_get_raw(i) {
+                Ok(raw_value) => {
+                    // Try to convert to appropriate JSON type
+                    if let Ok(val) = data_row.try_get::<Option<String>, _>(i) {
+                        val.map_or(serde_json::Value::Null, |s| serde_json::Value::String(s))
+                    } else if let Ok(val) = data_row.try_get::<Option<i32>, _>(i) {
+                        val.map_or(serde_json::Value::Null, |n| serde_json::Value::Number(n.into()))
+                    } else if let Ok(val) = data_row.try_get::<Option<i64>, _>(i) {
+                        val.map_or(serde_json::Value::Null, |n| serde_json::Value::Number(n.into()))
+                    } else if let Ok(val) = data_row.try_get::<Option<f64>, _>(i) {
+                        val.map_or(serde_json::Value::Null, |n| serde_json::Value::Number(serde_json::Number::from_f64(n).unwrap_or(serde_json::Number::from(0))))
+                    } else if let Ok(val) = data_row.try_get::<Option<bool>, _>(i) {
+                        val.map_or(serde_json::Value::Null, |b| serde_json::Value::Bool(b))
+                    } else {
+                        serde_json::Value::String("Unsupported type".to_string())
+                    }
+                }
+                Err(_) => serde_json::Value::Null,
+            };
+            row_data.push(value);
+        }
+        rows.push(row_data);
+    }
+
+    Ok(HttpResponse::Ok().json(TableData { columns, rows }))
+}
+
 #[derive(Deserialize)]
 struct UpdateProfileImageRequest {
     profile_image: String,
@@ -710,5 +957,9 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_all_cart_items)
         .service(create_vendor_report_route)
         .service(get_all_vendor_reports_route)
-        .service(update_vendor_report_status_route);
+        .service(update_vendor_report_status_route)
+        .service(get_databases)
+        .service(get_tables)
+        .service(get_table_columns)
+        .service(get_table_data);
 }

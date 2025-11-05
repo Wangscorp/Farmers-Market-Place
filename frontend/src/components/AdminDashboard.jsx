@@ -9,6 +9,11 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [reports, setReports] = useState([]);
+  const [databases, setDatabases] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tableColumns, setTableColumns] = useState([]);
+  const [tableData, setTableData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('users');
@@ -24,6 +29,8 @@ const AdminDashboard = () => {
       fetchTransactions();
     } else if (activeTab === 'reports') {
       fetchReports();
+    } else if (activeTab === 'database') {
+      fetchDatabases();
     }
   }, [user, navigate, activeTab]);
 
@@ -64,6 +71,52 @@ const AdminDashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDatabases = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get('/api/admin/databases');
+      setDatabases(response.data);
+    } catch (err) {
+      setError(err.response?.data || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTables = async () => {
+    try {
+      const response = await axios.get('/api/admin/tables');
+      setTables(response.data);
+    } catch (err) {
+      setError(err.response?.data || err.message);
+    }
+  };
+
+  const fetchTableColumns = async (tableName) => {
+    try {
+      const response = await axios.get(`/api/admin/tables/${tableName}/columns`);
+      setTableColumns(response.data);
+    } catch (err) {
+      setError(err.response?.data || err.message);
+    }
+  };
+
+  const fetchTableData = async (tableName) => {
+    try {
+      const response = await axios.get(`/api/admin/tables/${tableName}/data`);
+      setTableData(response.data);
+    } catch (err) {
+      setError(err.response?.data || err.message);
+    }
+  };
+
+  const handleTableClick = async (table) => {
+    setSelectedTable(table);
+    await fetchTableColumns(table.name);
+    await fetchTableData(table.name);
   };
 
   const handleRoleChange = async (userId, newRole) => {
@@ -159,6 +212,12 @@ const AdminDashboard = () => {
           onClick={() => setActiveTab('reports')}
         >
           Vendor Reports ({reports.length})
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'database' ? 'active' : ''}`}
+          onClick={() => setActiveTab('database')}
+        >
+          Database Management
         </button>
       </div>
 
@@ -338,6 +397,106 @@ const AdminDashboard = () => {
         </div>
       )}
 
+      {activeTab === 'database' && (
+        <div className="database-container">
+          <h2>Database Management</h2>
+
+          <div className="database-section">
+            <h3>Databases</h3>
+            <div className="database-list">
+              {databases.map(db => (
+                <div key={db.name} className="database-item">
+                  <h4>{db.name}</h4>
+                  <p>Owner: {db.owner}</p>
+                  <p>Encoding: {db.encoding}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="database-section">
+            <h3>Tables</h3>
+            <button onClick={fetchTables} className="btn-primary">Load Tables</button>
+            <div className="table-list">
+              {tables.map(table => (
+                <div
+                  key={table.name}
+                  className={`table-item ${selectedTable?.name === table.name ? 'selected' : ''}`}
+                  onClick={() => handleTableClick(table)}
+                >
+                  <h4>{table.name}</h4>
+                  <p>Schema: {table.schema}</p>
+                  <p>Type: {table.table_type}</p>
+                  <p>Owner: {table.owner}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {selectedTable && (
+            <div className="database-section">
+              <h3>Table: {selectedTable.name}</h3>
+
+              <div className="table-details">
+                <div className="columns-section">
+                  <h4>Columns</h4>
+                  <table className="columns-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Nullable</th>
+                        <th>Default</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableColumns.map(col => (
+                        <tr key={col.name}>
+                          <td>{col.name}</td>
+                          <td>{col.data_type}</td>
+                          <td>{col.is_nullable}</td>
+                          <td>{col.default_value || 'N/A'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="data-section">
+                  <h4>Data (First 100 rows)</h4>
+                  {tableData.columns && tableData.rows ? (
+                    <div className="data-table-container">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            {tableData.columns.map(col => (
+                              <th key={col}>{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tableData.rows.map((row, index) => (
+                            <tr key={index}>
+                              {row.map((cell, cellIndex) => (
+                                <td key={cellIndex}>
+                                  {cell === null ? 'NULL' : String(cell)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p>No data available or loading...</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       <style jsx>{`
         .admin-dashboard {
           padding: 20px;
@@ -485,6 +644,116 @@ const AdminDashboard = () => {
         .btn-dismiss {
           background-color: #f8d7da;
           color: #721c24;
+        }
+        .database-container {
+          max-width: 100%;
+        }
+        .database-section {
+          margin-bottom: 30px;
+          padding: 20px;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          background-color: #f9f9f9;
+        }
+        .database-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 15px;
+        }
+        .database-item {
+          padding: 15px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          background-color: white;
+        }
+        .database-item h4 {
+          margin: 0 0 10px 0;
+          color: #333;
+        }
+        .database-item p {
+          margin: 5px 0;
+          font-size: 14px;
+          color: #666;
+        }
+        .table-list {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+          gap: 15px;
+          margin-top: 15px;
+        }
+        .table-item {
+          padding: 15px;
+          border: 1px solid #e0e0e0;
+          border-radius: 6px;
+          background-color: white;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+        .table-item:hover {
+          border-color: #007bff;
+          box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        }
+        .table-item.selected {
+          border-color: #007bff;
+          background-color: #e7f3ff;
+        }
+        .table-item h4 {
+          margin: 0 0 8px 0;
+          color: #333;
+        }
+        .table-item p {
+          margin: 4px 0;
+          font-size: 13px;
+          color: #666;
+        }
+        .table-details {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        .columns-section,
+        .data-section {
+          background-color: white;
+          padding: 15px;
+          border-radius: 6px;
+          border: 1px solid #e0e0e0;
+        }
+        .columns-table,
+        .data-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-top: 10px;
+        }
+        .columns-table th,
+        .columns-table td,
+        .data-table th,
+        .data-table td {
+          padding: 8px 12px;
+          text-align: left;
+          border-bottom: 1px solid #ddd;
+        }
+        .columns-table th,
+        .data-table th {
+          background-color: #f8f9fa;
+          font-weight: 600;
+        }
+        .data-table-container {
+          max-height: 400px;
+          overflow-y: auto;
+          border: 1px solid #e0e0e0;
+          border-radius: 4px;
+        }
+        .btn-primary {
+          background-color: #007bff;
+          color: white;
+          border: none;
+          padding: 8px 16px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .btn-primary:hover {
+          background-color: #0056b3;
         }
       `}</style>
     </div>

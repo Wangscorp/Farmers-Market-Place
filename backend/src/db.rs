@@ -36,7 +36,7 @@ pub async fn init_db() -> PgPool {
         CREATE TABLE IF NOT EXISTS products (
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
-            price DECIMAL(10,2) NOT NULL,
+            price FLOAT8 NOT NULL,
             category VARCHAR(100) NOT NULL,
             description TEXT,
             image TEXT,
@@ -583,12 +583,10 @@ pub async fn create_vendor_report(
     .await?;
 
     let product_name = if let Some(pid) = product_id {
-        Some(sqlx::query_scalar!(
-            "SELECT name FROM products WHERE id = $1",
-            pid
-        )
-        .fetch_one(pool)
-        .await?)
+        Some(sqlx::query_scalar("SELECT name FROM products WHERE id = $1")
+            .bind(pid)
+            .fetch_one(pool)
+            .await?)
     } else {
         None
     };
