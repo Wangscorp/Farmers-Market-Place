@@ -7,7 +7,7 @@
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, CheckoutRequest, CheckoutResponse};
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest};
 use crate::db;  // Database helper functions
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -70,19 +70,25 @@ async fn create_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, pr
     }
 
     // Check report count
-    let report_count: (i32,) = match sqlx::query_as("SELECT COUNT(*) FROM vendor_reports WHERE vendor_id = $1")
+    let report_count: i64 = match sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM vendor_reports WHERE vendor_id = $1")
         .bind(vendor_id)
         .fetch_one(pool.get_ref())
         .await {
-        Ok(result) => result,
-        Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to check report count")),
+        Ok(count) => count,
+        Err(e) => {
+            eprintln!("Database error checking report count: {:?}", e);
+            return Ok(HttpResponse::InternalServerError().json(json!({
+                "error": "Failed to check report count",
+                "details": format!("{:?}", e)
+            })));
+        },
     };
 
-    if report_count.0 >= 5 {
+    if report_count >= 5 {
         return Ok(HttpResponse::Forbidden().json("Account suspended due to multiple reports."));
     }
 
-    match db::create_product(&pool, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.image.as_deref(), vendor_id).await {
+    match db::create_product(&pool, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.quantity, product_req.image.as_deref(), vendor_id).await {
         Ok(product) => Ok(HttpResponse::Created().json(product)),
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create product")),
     }
@@ -107,7 +113,7 @@ async fn update_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, pr
         Err(response) => return Ok(response),
     };
 
-    match db::update_product(&pool, *product_id, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.image.as_deref(), vendor_id).await {
+    match db::update_product(&pool, *product_id, &product_req.name, product_req.price, &product_req.category, &product_req.description, product_req.quantity, product_req.image.as_deref(), vendor_id).await {
         Ok(product) => Ok(HttpResponse::Ok().json(product)),
         Err(_) => Ok(HttpResponse::BadRequest().json("Product not found or access denied")),
     }
@@ -341,10 +347,29 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
             // 3. Handle payment confirmation callback
             // 4. Clear cart only after successful payment
 
+            // Create shipping orders for each cart item
+            for item in &cart_items {
+                match db::create_shipping_order(&pool, user_id, item.product_id, item.quantity, "Default shipping address - please update in your orders").await {
+                    Ok(_) => {},
+                    Err(e) => {
+                        eprintln!("Failed to create shipping order for product {}: {:?}", item.product_id, e);
+                        // Continue with other orders even if one fails
+                    }
+                }
+            }
+
+            // Clear the cart after successful checkout
+            for item in &cart_items {
+                match db::remove_from_cart_with_user(&pool, item.id, user_id).await {
+                    Ok(_) => {},
+                    Err(e) => eprintln!("Failed to remove cart item {}: {:?}", item.id, e),
+                }
+            }
+
             // For demo purposes, simulate successful payment initiation
             let response = CheckoutResponse {
                 transaction_id: transaction_id.clone(),
-                message: "M-Pesa payment initiated. Check your phone for the STK push prompt.".to_string(),
+                message: "M-Pesa payment initiated. Check your phone for the STK push prompt. Your orders have been created and will be processed once payment is confirmed.".to_string(),
                 status: "initiated".to_string(),
             };
 
@@ -418,6 +443,21 @@ async fn get_all_users(
     }
 }
 
+#[get("/api/admin/pending-vendors")]
+async fn get_pending_vendors(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    if let Err(response) = check_admin_auth(&req) {
+        return Ok(response);
+    }
+
+    match db::get_pending_vendors(&pool).await {
+        Ok(vendors) => Ok(HttpResponse::Ok().json(vendors)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch pending vendors")),
+    }
+}
+
 #[patch("/api/admin/users/{user_id}")]
 async fn update_user_role(
     req: actix_web::HttpRequest,
@@ -456,6 +496,47 @@ async fn update_user_verification(
     match db::update_user_verification(&pool, *user_id, request.verified).await {
         Ok(_) => Ok(HttpResponse::Ok().json("Verification status updated successfully")),
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to update verification: {:?}", e))),
+    }
+}
+
+/**
+ * POST /vendor/upload-verification - Upload vendor verification document
+ *
+ * Allows vendors to upload documents (ID, business license, etc.) for verification.
+ * The document image is stored as Base64 encoded data.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - PostgreSQL connection pool
+ * @param request - JSON request body with verification_document (Base64 encoded)
+ * @returns JSON confirmation message
+ */
+#[post("/vendor/upload-verification")]
+async fn upload_verification_document(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    request: web::Json<UploadVerificationDocumentRequest>
+) -> ActixResult<HttpResponse> {
+    let vendor_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    // Check that document is not empty
+    if request.verification_document.is_empty() {
+        return Ok(HttpResponse::BadRequest().json("Verification document cannot be empty"));
+    }
+
+    // Check document size (limit to ~5MB of Base64 encoded data)
+    if request.verification_document.len() > 6_500_000 {
+        return Ok(HttpResponse::BadRequest().json("Document is too large. Maximum size is 5MB"));
+    }
+
+    match db::upload_verification_document(&pool, vendor_id, &request.verification_document).await {
+        Ok(_) => Ok(HttpResponse::Ok().json(json!({
+            "success": true,
+            "message": "Verification document submitted successfully. An administrator will review your submission."
+        }))),
+        Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to upload verification document: {:?}", e))),
     }
 }
 
@@ -836,7 +917,7 @@ async fn get_table_data(
         for (i, _col) in columns.iter().enumerate() {
             // Convert each value to JSON
             let value: serde_json::Value = match data_row.try_get_raw(i) {
-                Ok(raw_value) => {
+                Ok(_raw_value) => {
                     // Try to convert to appropriate JSON type
                     if let Ok(val) = data_row.try_get::<Option<String>, _>(i) {
                         val.map_or(serde_json::Value::Null, |s| serde_json::Value::String(s))
@@ -871,6 +952,16 @@ struct UpdateProfileImageRequest {
 struct UpdateProfileRequest {
     username: Option<String>,
     email: Option<String>,
+    secondary_email: Option<String>,
+    mpesa_number: Option<String>,
+    payment_preference: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UpdateAdminCredentialsRequest {
+    current_password: String,
+    new_username: Option<String>,
+    new_password: Option<String>,
 }
 
 // Profile image update endpoint for users to update their own profile images
@@ -903,7 +994,7 @@ async fn update_profile(
         Err(response) => return Ok(response),
     };
 
-    match db::update_user_profile(&pool, claims.sub, request.username.as_deref(), request.email.as_deref()).await {
+    match db::update_user_profile(&pool, claims.sub, request.username.as_deref(), request.email.as_deref(), request.secondary_email.as_deref(), request.mpesa_number.as_deref(), request.payment_preference.as_deref()).await {
         Ok(_) => {
             // Return a success message with the updated username (if changed)
             let response = json!({
@@ -916,6 +1007,529 @@ async fn update_profile(
             Ok(HttpResponse::Conflict().json("Username or email already exists"))
         }
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update profile")),
+    }
+}
+
+// Admin credentials update endpoint - allows admin to change their username and password
+#[patch("/admin/credentials")]
+async fn update_admin_credentials(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    request: web::Json<UpdateAdminCredentialsRequest>,
+) -> ActixResult<HttpResponse> {
+    // Only allow admin users
+    let claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    if claims.role != "Admin" {
+        return Ok(HttpResponse::Forbidden().json("Admin privileges required"));
+    }
+
+    // Verify current password
+    let current_user = match db::authenticate_user(&pool, &claims.username, &request.current_password).await {
+        Ok(user) => user,
+        Err(_) => return Ok(HttpResponse::Unauthorized().json("Current password is incorrect")),
+    };
+
+    // Update username if provided
+    if let Some(new_username) = &request.new_username {
+        if new_username != &current_user.username {
+            match db::update_user_profile(&pool, claims.sub, Some(new_username), None, None, None, None).await {
+                Ok(_) => {},
+                Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
+                    return Ok(HttpResponse::Conflict().json("Username already exists"));
+                }
+                Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to update username")),
+            }
+        }
+    }
+
+    // Update password if provided
+    if let Some(new_password) = &request.new_password {
+        match db::reset_user_password(&pool, claims.sub, new_password).await {
+            Ok(_) => {},
+            Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to update password")),
+        }
+    }
+
+    Ok(HttpResponse::Ok().json(json!({
+        "message": "Admin credentials updated successfully"
+    })))
+}
+
+/**
+ * POST /messages - Send a message
+ *
+ * Allows authenticated users to send messages to other users.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param message_req - JSON request with receiver_id and content
+ * @returns JSON of the sent message
+ */
+#[post("/messages")]
+async fn send_message_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    message_req: web::Json<SendMessageRequest>
+) -> ActixResult<HttpResponse> {
+    let sender_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::send_message(&pool, sender_id, message_req.receiver_id, &message_req.content).await {
+        Ok(message) => Ok(HttpResponse::Created().json(message)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to send message")),
+    }
+}
+
+/**
+ * GET /messages/{user_id} - Get messages between current user and another user
+ *
+ * Retrieves all messages between the authenticated user and the specified user.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param other_user_id - User ID from URL path
+ * @returns JSON array of messages
+ */
+#[get("/messages/{user_id}")]
+async fn get_messages_between_users_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    other_user_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    let current_user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_messages_between_users(&pool, current_user_id, *other_user_id).await {
+        Ok(messages) => Ok(HttpResponse::Ok().json(messages)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch messages")),
+    }
+}
+
+/**
+ * GET /messages - Get user's conversations
+ *
+ * Retrieves a list of recent conversations for the authenticated user.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of conversation previews
+ */
+#[get("/messages")]
+async fn get_user_conversations_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_user_conversations(&pool, user_id).await {
+        Ok(conversations) => Ok(HttpResponse::Ok().json(conversations)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch conversations")),
+    }
+}
+
+/**
+ * PATCH /messages/{user_id}/read - Mark messages as read
+ *
+ * Marks all messages from the specified user as read for the authenticated user.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param other_user_id - User ID from URL path
+ * @returns Success message
+ */
+#[patch("/messages/{user_id}/read")]
+async fn mark_messages_as_read_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    other_user_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    let current_user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::mark_messages_as_read(&pool, current_user_id, *other_user_id).await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Messages marked as read")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to mark messages as read")),
+    }
+}
+
+/**
+ * POST /follow - Follow a vendor
+ *
+ * Allows customers to follow vendors.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param follow_req - JSON request with vendor_id
+ * @returns JSON of the follow relationship
+ */
+#[post("/follow")]
+async fn follow_vendor_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    follow_req: web::Json<FollowRequest>
+) -> ActixResult<HttpResponse> {
+    let follower_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::follow_vendor(&pool, follower_id, follow_req.vendor_id).await {
+        Ok(follow) => Ok(HttpResponse::Created().json(follow)),
+        Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
+            Ok(HttpResponse::Conflict().json("Already following this vendor"))
+        }
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to follow vendor")),
+    }
+}
+
+/**
+ * DELETE /follow/{vendor_id} - Unfollow a vendor
+ *
+ * Allows customers to unfollow vendors.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param vendor_id - Vendor ID from URL path
+ * @returns Success message
+ */
+#[delete("/follow/{vendor_id}")]
+async fn unfollow_vendor_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    vendor_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    let follower_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::unfollow_vendor(&pool, follower_id, *vendor_id).await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Successfully unfollowed vendor")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to unfollow vendor")),
+    }
+}
+
+/**
+ * GET /follow/{vendor_id} - Check if following a vendor
+ *
+ * Checks if the authenticated user is following the specified vendor.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param vendor_id - Vendor ID from URL path
+ * @returns JSON with following status
+ */
+#[get("/follow/{vendor_id}")]
+async fn is_following_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    vendor_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    let follower_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::is_following(&pool, follower_id, *vendor_id).await {
+        Ok(is_following) => Ok(HttpResponse::Ok().json(json!({ "is_following": is_following }))),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to check follow status")),
+    }
+}
+
+/**
+ * GET /follow - Get user's follows
+ *
+ * Retrieves all vendors that the authenticated user is following.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of follows
+ */
+#[get("/follow")]
+async fn get_user_follows_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_user_follows(&pool, user_id).await {
+        Ok(follows) => Ok(HttpResponse::Ok().json(follows)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch follows")),
+    }
+}
+
+/**
+ * GET /followers/{vendor_id} - Get vendor's followers
+ *
+ * Retrieves all followers of the specified vendor.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param vendor_id - Vendor ID from URL path
+ * @returns JSON array of followers
+ */
+#[get("/followers/{vendor_id}")]
+async fn get_vendor_followers_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    vendor_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    // Only allow vendors to see their own followers, or admins
+    let claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    if claims.role != "Admin" && claims.role != "Vendor" {
+        return Ok(HttpResponse::Forbidden().json("Access denied"));
+    }
+
+    if claims.role == "Vendor" && claims.sub != *vendor_id {
+        return Ok(HttpResponse::Forbidden().json("Can only view your own followers"));
+    }
+
+    match db::get_vendor_followers(&pool, *vendor_id).await {
+        Ok(followers) => Ok(HttpResponse::Ok().json(followers)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch followers")),
+    }
+}
+
+/**
+ * POST /reviews - Create a product review
+ *
+ * Allows customers to leave reviews for products they've purchased.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param review_req - JSON request with product_id, rating, and comment
+ * @returns JSON of the created review
+ */
+#[post("/reviews")]
+async fn create_review_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    review_req: web::Json<CreateReviewRequest>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::create_review(&pool, customer_id, review_req.product_id, review_req.rating, review_req.comment.as_deref()).await {
+        Ok(review) => Ok(HttpResponse::Created().json(review)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create review")),
+    }
+}
+
+/**
+ * GET /reviews/product/{product_id} - Get reviews for a product
+ *
+ * Retrieves all reviews for the specified product.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param product_id - Product ID from URL path
+ * @returns JSON array of reviews
+ */
+#[get("/reviews/product/{product_id}")]
+async fn get_product_reviews_route(
+    _req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    product_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    // Allow anyone to view reviews
+    match db::get_product_reviews(&pool, *product_id).await {
+        Ok(reviews) => Ok(HttpResponse::Ok().json(reviews)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch reviews")),
+    }
+}
+
+/**
+ * GET /reviews - Get customer's reviews
+ *
+ * Retrieves all reviews written by the authenticated customer.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of customer's reviews
+ */
+#[get("/reviews")]
+async fn get_customer_reviews_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_customer_reviews(&pool, customer_id).await {
+        Ok(reviews) => Ok(HttpResponse::Ok().json(reviews)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch reviews")),
+    }
+}
+
+/**
+ * POST /shipping - Create a shipping order
+ *
+ * Allows customers to create shipping orders for products.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param shipping_req - JSON request with product_id, quantity, and shipping_address
+ * @returns JSON of the created shipping order
+ */
+#[post("/shipping")]
+async fn create_shipping_order_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    shipping_req: web::Json<CreateShippingOrderRequest>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::create_shipping_order(&pool, customer_id, shipping_req.product_id, shipping_req.quantity, &shipping_req.shipping_address).await {
+        Ok(order) => Ok(HttpResponse::Created().json(order)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create shipping order")),
+    }
+}
+
+/**
+ * GET /shipping - Get customer's shipping orders
+ *
+ * Retrieves all shipping orders for the authenticated customer.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of customer's shipping orders
+ */
+#[get("/shipping")]
+async fn get_customer_shipping_orders_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_customer_shipping_orders(&pool, customer_id).await {
+        Ok(orders) => Ok(HttpResponse::Ok().json(orders)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch shipping orders")),
+    }
+}
+
+/**
+ * GET /shipping/vendor - Get vendor's shipping orders
+ *
+ * Retrieves all shipping orders for the authenticated vendor.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of vendor's shipping orders
+ */
+#[get("/shipping/vendor")]
+async fn get_vendor_shipping_orders_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let vendor_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_vendor_shipping_orders(&pool, vendor_id).await {
+        Ok(orders) => Ok(HttpResponse::Ok().json(orders)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch shipping orders")),
+    }
+}
+
+/**
+ * PATCH /shipping/{order_id}/status - Update shipping order status
+ *
+ * Allows vendors to update the shipping status of their orders.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param order_id - Order ID from URL path
+ * @param status_req - JSON request with shipping_status and optional tracking_number
+ * @returns Success message
+ */
+#[patch("/shipping/{order_id}/status")]
+async fn update_shipping_status_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    order_id: web::Path<i32>,
+    status_req: web::Json<UpdateShippingStatusRequest>
+) -> ActixResult<HttpResponse> {
+    let vendor_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    // Verify the order belongs to this vendor
+    let order_vendor_id: i32 = match sqlx::query_scalar("SELECT vendor_id FROM shipping_orders WHERE id = $1")
+        .bind(*order_id)
+        .fetch_one(pool.get_ref())
+        .await {
+        Ok(id) => id,
+        Err(_) => return Ok(HttpResponse::NotFound().json("Order not found")),
+    };
+
+    if order_vendor_id != vendor_id {
+        return Ok(HttpResponse::Forbidden().json("Can only update your own orders"));
+    }
+
+    match db::update_shipping_status(&pool, *order_id, &status_req.shipping_status, status_req.tracking_number.as_deref()).await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Shipping status updated successfully")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update shipping status")),
+    }
+}
+
+/**
+ * GET /vendors/{vendor_id}/profile - Get vendor profile information
+ *
+ * Retrieves vendor profile information including total purchases, revenue, and follower count.
+ * Available to all authenticated users.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param vendor_id - Vendor ID from URL path
+ * @returns JSON of vendor profile information
+ */
+#[get("/vendors/{vendor_id}/profile")]
+async fn get_vendor_profile_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    vendor_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    // Require authentication
+    let _claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_vendor_profile(&pool, *vendor_id).await {
+        Ok(profile) => Ok(HttpResponse::Ok().json(profile)),
+        Err(_) => Ok(HttpResponse::NotFound().json("Vendor not found")),
     }
 }
 
@@ -936,6 +1550,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(signup);             // POST /signup
     cfg.service(update_profile_image); // PATCH /profile/image
     cfg.service(update_profile);     // PATCH /profile
+    cfg.service(update_admin_credentials); // PATCH /admin/credentials
+    cfg.service(get_vendor_profile_route); // GET /vendors/{vendor_id}/profile
 
     // Cart routes - currently without authentication for testing
     cfg.service(get_cart)
@@ -944,13 +1560,39 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(remove_from_cart_route)
         .service(checkout);
 
+    // Message routes
+    cfg.service(send_message_route)
+        .service(get_messages_between_users_route)
+        .service(get_user_conversations_route)
+        .service(mark_messages_as_read_route);
+
+    // Follow routes
+    cfg.service(follow_vendor_route)
+        .service(unfollow_vendor_route)
+        .service(is_following_route)
+        .service(get_user_follows_route)
+        .service(get_vendor_followers_route);
+
+    // Review routes
+    cfg.service(create_review_route)
+        .service(get_product_reviews_route)
+        .service(get_customer_reviews_route);
+
+    // Shipping routes
+    cfg.service(create_shipping_order_route)
+        .service(get_customer_shipping_orders_route)
+        .service(get_vendor_shipping_orders_route)
+        .service(update_shipping_status_route);
+
     // Vendor report count route
     cfg.service(get_vendor_report_count);
 
     // Admin routes - authentication checked in route handlers
     cfg.service(get_all_users)
+        .service(get_pending_vendors)
         .service(update_user_role)
         .service(update_user_verification)
+        .service(upload_verification_document)
         .service(delete_user)
         .service(ban_user_route)
         .service(reset_user_password_route)

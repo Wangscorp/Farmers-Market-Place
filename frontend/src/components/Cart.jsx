@@ -18,9 +18,18 @@ const Cart = () => {
 
   const handleQuantityChange = async (itemId, newQuantity) => {
     try {
+      if (newQuantity <= 0) {
+        await handleRemoveFromCart(itemId);
+        return;
+      }
       await updateQuantity(itemId, newQuantity);
-    } catch {
-      alert("Failed to update quantity");
+    } catch (error) {
+      // Show specific error message if available, otherwise generic message
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update quantity";
+      alert(errorMessage);
     }
   };
 
@@ -29,6 +38,16 @@ const Cart = () => {
       const token = localStorage.getItem("token");
       if (!token) {
         alert("Please log in to checkout");
+        return;
+      }
+
+      if (!mpesaNumber || !/^07\d{8}$/.test(mpesaNumber)) {
+        alert("Please enter a valid M-Pesa phone number (07XXXXXXXX)");
+        return;
+      }
+
+      if (cartItems.length === 0) {
+        alert("Your cart is empty");
         return;
       }
 
@@ -50,13 +69,14 @@ const Cart = () => {
           `Payment initiated! Check your phone for M-Pesa prompt. Transaction ID: ${result.transaction_id}`
         );
         // Clear cart after successful payment initiation
-        // Note: In a real app, you'd wait for payment confirmation
+        setMpesaNumber("");
         window.location.reload(); // Simple way to refresh and clear cart
       } else {
-        const error = await response.json();
-        alert(`Payment failed: ${error.message || "Unknown error"}`);
+        const errorData = await response.json();
+        alert(`Payment failed: ${errorData.message || "Unknown error"}`);
       }
-    } catch {
+    } catch (error) {
+      console.error("Checkout error:", error);
       alert("Failed to process payment. Please try again.");
     }
   };
@@ -76,7 +96,11 @@ const Cart = () => {
             <div key={item.id} className="cart-item">
               {item.product.image && (
                 <img
-                  src={`data:image/jpeg;base64,${item.product.image}`}
+                  src={
+                    item.product.image.startsWith("data:")
+                      ? item.product.image
+                      : `data:image/jpeg;base64,${item.product.image}`
+                  }
                   alt={item.product.name}
                   className="cart-item-image"
                 />
@@ -93,6 +117,11 @@ const Cart = () => {
                     onClick={() =>
                       handleQuantityChange(item.id, item.quantity - 1)
                     }
+                    title={
+                      item.quantity === 1
+                        ? "Remove item from cart"
+                        : `Decrease quantity (${item.quantity - 1} will remain)`
+                    }
                   >
                     -
                   </button>
@@ -100,6 +129,14 @@ const Cart = () => {
                   <button
                     onClick={() =>
                       handleQuantityChange(item.id, item.quantity + 1)
+                    }
+                    disabled={item.quantity >= item.product.quantity}
+                    title={
+                      item.quantity >= item.product.quantity
+                        ? `Only ${item.product.quantity} available in stock`
+                        : `Add more (${
+                            item.product.quantity - item.quantity
+                          } remaining)`
                     }
                   >
                     +

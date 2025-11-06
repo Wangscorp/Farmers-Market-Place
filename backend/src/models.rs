@@ -10,6 +10,7 @@ pub struct Product {
     pub category: String,
     pub description: Option<String>,
     pub image: Option<String>, // Base64 encoded image
+    pub quantity: i32,
     pub vendor_id: u32,
 }
 
@@ -22,6 +23,10 @@ pub struct User {
     pub profile_image: Option<String>, // Base64 encoded image
     pub verified: bool,
     pub banned: bool,
+    pub verification_document: Option<String>, // Base64 encoded verification document
+    pub secondary_email: Option<String>,
+    pub mpesa_number: Option<String>,
+    pub payment_preference: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -52,6 +57,7 @@ pub struct ProductRequest {
     pub price: f64,
     pub category: String,
     pub description: String,
+    pub quantity: i32,
     pub image: Option<String>, // Base64 encoded image
 }
 
@@ -100,6 +106,11 @@ pub struct UpdateUserVerificationRequest {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct UploadVerificationDocumentRequest {
+    pub verification_document: String, // Base64 encoded image
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct CheckoutRequest {
     pub mpesa_number: String,
     pub total_amount: f64,
@@ -110,6 +121,90 @@ pub struct CheckoutResponse {
     pub transaction_id: String,
     pub message: String,
     pub status: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Message {
+    pub id: i32,
+    pub sender_id: i32,
+    pub receiver_id: i32,
+    pub content: String,
+    pub is_read: bool,
+    pub created_at: String,
+    pub sender_username: String,
+    pub receiver_username: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Follow {
+    pub id: i32,
+    pub follower_id: i32,
+    pub vendor_id: i32,
+    pub created_at: String,
+    pub follower_username: String,
+    pub vendor_username: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SendMessageRequest {
+    pub receiver_id: i32,
+    pub content: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct FollowRequest {
+    pub vendor_id: i32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Review {
+    pub id: i32,
+    pub customer_id: i32,
+    pub product_id: i32,
+    pub vendor_id: i32,
+    pub rating: i32,
+    pub comment: Option<String>,
+    pub created_at: String,
+    pub customer_username: String,
+    pub product_name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ShippingOrder {
+    pub id: i32,
+    pub customer_id: i32,
+    pub product_id: i32,
+    pub vendor_id: i32,
+    pub quantity: i32,
+    pub total_amount: f64,
+    pub shipping_status: String,
+    pub tracking_number: Option<String>,
+    pub shipping_address: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub customer_username: String,
+    pub vendor_username: String,
+    pub product_name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateReviewRequest {
+    pub product_id: i32,
+    pub rating: i32,
+    pub comment: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateShippingOrderRequest {
+    pub product_id: i32,
+    pub quantity: i32,
+    pub shipping_address: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct UpdateShippingStatusRequest {
+    pub shipping_status: String,
+    pub tracking_number: Option<String>,
 }
 
 // JWT utilities
@@ -133,6 +228,16 @@ impl Claims {
             exp: expiration,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VendorVerification {
+    pub id: i32,
+    pub username: String,
+    pub email: String,
+    pub profile_image: Option<String>,
+    pub mpesa_number: Option<String>,
+    pub payment_preference: Option<String>,
 }
 
 pub fn create_jwt(user: &User) -> Result<String, Error> {

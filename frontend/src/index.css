@@ -1,5 +1,5 @@
 :root {
-  font-family: 'Georgia', serif; /* Rustic serif font for farmer feel */
+  font-family: "Georgia", serif; /* Rustic serif font for farmer feel */
   line-height: 1.6;
   font-weight: 400;
 
@@ -10,6 +10,17 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 a {
@@ -24,10 +35,16 @@ a:hover {
 body {
   margin: 0;
   min-height: 100vh;
-  background: linear-gradient(to bottom, #f5f5dc, #daa520); /* Beige to gold gradient */
+  background: linear-gradient(
+    to bottom,
+    #f5f5dc,
+    #daa520
+  ); /* Beige to gold gradient */
 }
 
-h1, h2, h3 {
+h1,
+h2,
+h3 {
   color: #8b4513; /* Saddlebrown for headings */
 }
 
@@ -50,4 +67,69 @@ button:hover {
 button:focus,
 button:focus-visible {
   outline: 2px solid #228b22;
+}
+
+/* Mobile-first responsive adjustments */
+@media (max-width: 768px) {
+  :root {
+    font-size: 15px;
+  }
+
+  body {
+    background: linear-gradient(to bottom, #f5f5dc, #daa520);
+  }
+
+  button {
+    padding: 0.5em 1em;
+    font-size: 0.95em;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    word-break: break-word;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  button {
+    padding: 0.45em 0.9em;
+    font-size: 0.9em;
+    width: 100%;
+  }
+
+  a {
+    display: inline-block;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }

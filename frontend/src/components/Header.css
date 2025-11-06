@@ -2,26 +2,56 @@ header {
   background-color: var(--header-bg);
   color: var(--text-color);
   padding: 1rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 1000;
 }
 
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
 header h1 {
   margin: 0;
-  font-family: 'Montserrat', sans-serif;
+  font-family: var(--font-display);
   font-size: 1.8rem;
   color: var(--primary-color);
+  white-space: nowrap;
+}
+
+/* Hamburger Menu */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  gap: 0.35rem;
+}
+
+.menu-toggle span {
+  width: 25px;
+  height: 3px;
+  background-color: var(--primary-color);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+.menu-toggle:hover span {
+  background-color: var(--secondary-color);
 }
 
 nav {
   display: flex;
   gap: 1.5rem;
   align-items: center;
+  max-width: 1400px;
 }
 
 nav a {
@@ -33,7 +63,8 @@ nav a {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-nav a:hover, nav a.active {
+nav a:hover,
+nav a.active {
   background-color: var(--primary-color);
   color: white;
 }
@@ -54,8 +85,220 @@ nav a:hover, nav a.active {
   color: white;
 }
 
-nav span {
+.welcome-text {
   font-weight: 600;
   color: var(--primary-color);
   margin-right: 1rem;
+}
+
+/* User Profile Icon */
+.user-profile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-image {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-color);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.profile-image:hover {
+  transform: scale(1.1);
+}
+
+.profile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.profile-icon:hover {
+  transform: scale(1.1);
+  background-color: var(--secondary-color);
+}
+
+.profile-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* Desktop Layout */
+@media (min-width: 769px) {
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-container {
+    flex: 0;
+  }
+
+  header h1 {
+    margin: 0;
+  }
+
+  nav {
+    flex: 1;
+    justify-content: flex-end;
+  }
+
+  .menu-toggle {
+    display: none;
+  }
+}
+
+/* Tablet Design */
+@media (max-width: 768px) {
+  header {
+    padding: 1rem 1.5rem;
+  }
+
+  .header-container {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  nav {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--header-bg);
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  nav.active {
+    max-height: 600px;
+  }
+
+  nav a {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    width: 100%;
+  }
+
+  nav a:hover {
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .logout-btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.95rem;
+    width: 100%;
+  }
+
+  .welcome-text {
+    margin: 1rem 1rem 0;
+    font-size: 0.95rem;
+  }
+
+  .user-profile {
+    justify-content: flex-start;
+    margin-bottom: 0.5rem;
+    margin-right: 1rem;
+  }
+
+  .profile-image,
+  .profile-icon {
+    width: 35px;
+    height: 35px;
+  }
+
+  .profile-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Mobile Design */
+@media (max-width: 480px) {
+  header {
+    padding: 0.75rem 1rem;
+  }
+
+  .header-container {
+    width: 100%;
+  }
+
+  header h1 {
+    font-size: 1.2rem;
+  }
+
+  .menu-toggle {
+    display: flex;
+  }
+
+  .menu-toggle span {
+    width: 22px;
+    height: 2.5px;
+  }
+
+  nav {
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+
+  nav.active {
+    max-height: 700px;
+  }
+
+  nav a {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+  }
+
+  .logout-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.9rem;
+    border-width: 1.5px;
+  }
+
+  .welcome-text {
+    margin: 0.75rem 1rem 0;
+    font-size: 0.85rem;
+  }
+
+  .user-profile {
+    margin: 0.5rem 1rem 0;
+  }
+
+  .profile-image,
+  .profile-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  .profile-icon svg {
+    width: 18px;
+    height: 18px;
+  }
 }

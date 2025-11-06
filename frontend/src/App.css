@@ -5,7 +5,12 @@
   --text-color: #333333;
   --header-bg: #ffffff;
   --footer-bg: #333333;
-  --font-family: 'Roboto', sans-serif;
+  --font-family: "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+  --font-display: "Poppins", "Montserrat", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -14,6 +19,9 @@ body {
   color: var(--text-color);
   line-height: 1.6;
   margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -30,9 +38,42 @@ main {
   width: 100%;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   color: var(--primary-color);
   font-weight: 700;
+  font-family: var(--font-display);
+  margin-top: 0;
+}
+
+h1 {
+  font-size: 2.5rem;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 2rem;
+  line-height: 1.3;
+}
+
+h3 {
+  font-size: 1.5rem;
+  line-height: 1.3;
+}
+
+h4 {
+  font-size: 1.25rem;
+  line-height: 1.4;
+}
+
+h5,
+h6 {
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 a {
@@ -45,7 +86,8 @@ a:hover {
   color: var(--secondary-color);
 }
 
-button, .btn {
+button,
+.btn {
   background-color: var(--primary-color);
   color: white;
   padding: 12px 24px;
@@ -55,9 +97,11 @@ button, .btn {
   font-size: 1rem;
   font-weight: 600;
   transition: background-color 0.3s ease, transform 0.2s ease;
+  font-family: var(--font-family);
 }
 
-button:hover, .btn:hover {
+button:hover,
+.btn:hover {
   background-color: #246b37;
   transform: translateY(-2px);
 }
@@ -70,17 +114,96 @@ button:hover, .btn:hover {
   background-color: #e0934a;
 }
 
-input, textarea, select {
+input,
+textarea,
+select {
   width: 100%;
   padding: 12px;
   border: 1px solid #ccc;
   border-radius: 8px;
   font-size: 1rem;
+  font-family: var(--font-family);
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-input:focus, textarea:focus, select:focus {
+input:focus,
+textarea:focus,
+select:focus {
   outline: none;
   border-color: var(--primary-color);
   box-shadow: 0 0 0 3px rgba(44, 125, 66, 0.2);
+}
+
+/* Responsive Typography */
+@media (max-width: 768px) {
+  main {
+    padding: 1.5rem 0.75rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+
+  h4 {
+    font-size: 1.1rem;
+  }
+
+  button,
+  .btn {
+    padding: 10px 20px;
+    font-size: 0.95rem;
+  }
+
+  input,
+  textarea,
+  select {
+    padding: 10px;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  main {
+    padding: 1rem 0.5rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  h3 {
+    font-size: 1.1rem;
+  }
+
+  h4,
+  h5,
+  h6 {
+    font-size: 1rem;
+  }
+
+  button,
+  .btn {
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    width: 100%;
+  }
+
+  input,
+  textarea,
+  select {
+    padding: 10px;
+    font-size: 16px;
+  }
 }

@@ -1,0 +1,140 @@
+.customer-dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.customer-dashboard h1 {
+  color: #2c5530;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.dashboard-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.dashboard-section {
+  background: white;
+  border-radius: 10px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+  border: 1px solid #e0e0e0;
+}
+
+.dashboard-section h2 {
+  color: #2c5530;
+  margin-bottom: 1rem;
+  font-size: 1.4rem;
+}
+
+.follows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.follow-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.follow-item span {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.chat-btn-small {
+  background: #9b59b6;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.chat-btn-small:hover {
+  background: #8e44ad;
+}
+
+.conversations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.conversation-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.conversation-item:hover {
+  background: #e9ecef;
+  transform: translateY(-1px);
+}
+
+.conversation-info h4 {
+  margin: 0 0 0.25rem 0;
+  color: #2c3e50;
+  font-size: 1rem;
+}
+
+.last-message {
+  margin: 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-time {
+  color: #6c757d;
+  font-size: 0.8rem;
+  align-self: flex-start;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .customer-dashboard {
+    padding: 1rem;
+  }
+
+  .dashboard-content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .dashboard-section {
+    padding: 1rem;
+  }
+
+  .conversation-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .conversation-time {
+    align-self: flex-end;
+    font-size: 0.75rem;
+  }
+}

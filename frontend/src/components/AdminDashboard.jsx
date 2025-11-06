@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useUser } from './UserContext';
-import { useNavigate } from 'react-router-dom';
-import axios from '../api';
+import React, { useState, useEffect } from "react";
+import { useUser } from "../hooks/useUser";
+import { useNavigate } from "react-router-dom";
+import axios from "../api";
 
 const AdminDashboard = () => {
   const { user } = useUser();
@@ -11,25 +11,28 @@ const AdminDashboard = () => {
   const [reports, setReports] = useState([]);
   const [databases, setDatabases] = useState([]);
   const [tables, setTables] = useState([]);
+  const [pendingVendors, setPendingVendors] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tableColumns, setTableColumns] = useState([]);
   const [tableData, setTableData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState("users");
 
   useEffect(() => {
-    if (!user || user.role !== 'Admin') {
-      navigate('/auth');
+    if (!user || user.role !== "Admin") {
+      navigate("/auth");
       return;
     }
-    if (activeTab === 'users') {
+    if (activeTab === "users") {
       fetchUsers();
-    } else if (activeTab === 'transactions') {
+    } else if (activeTab === "transactions") {
       fetchTransactions();
-    } else if (activeTab === 'reports') {
+    } else if (activeTab === "reports") {
       fetchReports();
-    } else if (activeTab === 'database') {
+    } else if (activeTab === "verification") {
+      fetchPendingVendors();
+    } else if (activeTab === "database") {
       fetchDatabases();
     }
   }, [user, navigate, activeTab]);
@@ -38,7 +41,7 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/admin/users');
+      const response = await axios.get("/api/admin/users");
       setUsers(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -51,7 +54,7 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/admin/cart');
+      const response = await axios.get("/api/admin/cart");
       setTransactions(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -64,7 +67,7 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/admin/reports');
+      const response = await axios.get("/api/admin/reports");
       setReports(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -73,11 +76,38 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchPendingVendors = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await axios.get("/api/admin/pending-vendors");
+      setPendingVendors(response.data);
+    } catch (err) {
+      setError(err.response?.data || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyVendor = async (userId, approved) => {
+    try {
+      await axios.patch(`/api/admin/users/${userId}/verify`, {
+        verified: approved,
+      });
+      alert(approved ? "Vendor verified successfully!" : "Vendor rejected.");
+      fetchPendingVendors();
+    } catch (err) {
+      alert(
+        "Failed to update vendor status: " + (err.response?.data || err.message)
+      );
+    }
+  };
+
   const fetchDatabases = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/api/admin/databases');
+      const response = await axios.get("/api/admin/databases");
       setDatabases(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -88,7 +118,7 @@ const AdminDashboard = () => {
 
   const fetchTables = async () => {
     try {
-      const response = await axios.get('/api/admin/tables');
+      const response = await axios.get("/api/admin/tables");
       setTables(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -97,7 +127,9 @@ const AdminDashboard = () => {
 
   const fetchTableColumns = async (tableName) => {
     try {
-      const response = await axios.get(`/api/admin/tables/${tableName}/columns`);
+      const response = await axios.get(
+        `/api/admin/tables/${tableName}/columns`
+      );
       setTableColumns(response.data);
     } catch (err) {
       setError(err.response?.data || err.message);
@@ -122,7 +154,9 @@ const AdminDashboard = () => {
   const handleRoleChange = async (userId, newRole) => {
     try {
       await axios.patch(`/api/admin/users/${userId}`, { role: newRole });
-      setUsers(users.map(u => u.id === userId ? {...u, role: newRole} : u));
+      setUsers(
+        users.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
+      );
     } catch (err) {
       setError(err.response?.data || err.message);
     }
@@ -131,18 +165,18 @@ const AdminDashboard = () => {
   const handleVerificationToggle = async (userId, verified) => {
     try {
       await axios.patch(`/api/admin/users/${userId}/verify`, { verified });
-      setUsers(users.map(u => u.id === userId ? {...u, verified} : u));
+      setUsers(users.map((u) => (u.id === userId ? { ...u, verified } : u)));
     } catch (err) {
       setError(err.response?.data || err.message);
     }
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('Are you sure you want to delete this user?')) return;
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
 
     try {
       await axios.delete(`/api/admin/users/${userId}`);
-      setUsers(users.filter(u => u.id !== userId));
+      setUsers(users.filter((u) => u.id !== userId));
     } catch (err) {
       setError(err.response?.data || err.message);
     }
@@ -151,7 +185,7 @@ const AdminDashboard = () => {
   const handleBanToggle = async (userId, banned) => {
     try {
       await axios.patch(`/api/admin/users/${userId}/ban`, { banned });
-      setUsers(users.map(u => u.id === userId ? {...u, banned} : u));
+      setUsers(users.map((u) => (u.id === userId ? { ...u, banned } : u)));
     } catch (err) {
       setError(err.response?.data || err.message);
     }
@@ -161,7 +195,7 @@ const AdminDashboard = () => {
     try {
       await axios.patch(`/api/admin/reports/${reportId}`, {
         status,
-        admin_notes: adminNotes
+        admin_notes: adminNotes,
       });
       // Refresh reports after action
       fetchReports();
@@ -171,19 +205,28 @@ const AdminDashboard = () => {
   };
 
   const handleResetPassword = async (userId, username) => {
-    if (!window.confirm(`Are you sure you want to reset the password for "${username}"?\n\nThis will generate a new temporary password and send it to their email.`)) {
+    if (
+      !window.confirm(
+        `Are you sure you want to reset the password for "${username}"?\n\nThis will generate a new temporary password and send it to their email.`
+      )
+    ) {
       return;
     }
 
     try {
-      const response = await axios.patch(`/api/admin/users/${userId}/reset-password`);
-      alert(response.data.message || 'Password reset successfully. User has been emailed their new password.');
+      const response = await axios.patch(
+        `/api/admin/users/${userId}/reset-password`
+      );
+      alert(
+        response.data.message ||
+          "Password reset successfully. User has been emailed their new password."
+      );
     } catch (err) {
-      alert('Failed to reset password: ' + (err.response?.data || err.message));
+      alert("Failed to reset password: " + (err.response?.data || err.message));
     }
   };
 
-  if (!user || user.role !== 'Admin') {
+  if (!user || user.role !== "Admin") {
     return <div>Access denied. Admin privileges required.</div>;
   }
 
@@ -196,32 +239,38 @@ const AdminDashboard = () => {
 
       <div className="tab-buttons">
         <button
-          className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
-          onClick={() => setActiveTab('users')}
+          className={`tab-btn ${activeTab === "users" ? "active" : ""}`}
+          onClick={() => setActiveTab("users")}
         >
           User Management ({users.length})
         </button>
         <button
-          className={`tab-btn ${activeTab === 'transactions' ? 'active' : ''}`}
-          onClick={() => setActiveTab('transactions')}
+          className={`tab-btn ${activeTab === "transactions" ? "active" : ""}`}
+          onClick={() => setActiveTab("transactions")}
         >
           Transactions ({transactions.length})
         </button>
         <button
-          className={`tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reports')}
+          className={`tab-btn ${activeTab === "reports" ? "active" : ""}`}
+          onClick={() => setActiveTab("reports")}
         >
           Vendor Reports ({reports.length})
         </button>
         <button
-          className={`tab-btn ${activeTab === 'database' ? 'active' : ''}`}
-          onClick={() => setActiveTab('database')}
+          className={`tab-btn ${activeTab === "verification" ? "active" : ""}`}
+          onClick={() => setActiveTab("verification")}
+        >
+          Vendor Verification ({pendingVendors.length})
+        </button>
+        <button
+          className={`tab-btn ${activeTab === "database" ? "active" : ""}`}
+          onClick={() => setActiveTab("database")}
         >
           Database Management
         </button>
       </div>
 
-      {activeTab === 'users' && (
+      {activeTab === "users" && (
         <div className="user-table-container">
           <h2>User Management</h2>
           <table className="user-table">
@@ -237,7 +286,7 @@ const AdminDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.id}</td>
                   <td>{u.username}</td>
@@ -257,7 +306,9 @@ const AdminDashboard = () => {
                     <input
                       type="checkbox"
                       checked={u.verified}
-                      onChange={(e) => handleVerificationToggle(u.id, e.target.checked)}
+                      onChange={(e) =>
+                        handleVerificationToggle(u.id, e.target.checked)
+                      }
                     />
                   </td>
                   <td>
@@ -292,7 +343,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'transactions' && (
+      {activeTab === "transactions" && (
         <div className="transaction-table-container">
           <h2>Transaction Overview</h2>
           {transactions.length === 0 ? (
@@ -311,7 +362,7 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {transactions.map(t => (
+                {transactions.map((t) => (
                   <tr key={t.id}>
                     <td>{t.id}</td>
                     <td>User {t.user_id}</td>
@@ -328,7 +379,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'reports' && (
+      {activeTab === "reports" && (
         <div className="reports-table-container">
           <h2>Vendor Reports Management</h2>
           {reports.length === 0 ? (
@@ -350,38 +401,56 @@ const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {reports.map(r => (
+                {reports.map((r) => (
                   <tr key={r.id}>
                     <td>{r.id}</td>
                     <td>{r.customer_username}</td>
                     <td>{r.vendor_username}</td>
-                    <td>{r.product_name || 'N/A'}</td>
+                    <td>{r.product_name || "N/A"}</td>
                     <td>{r.report_type}</td>
-                    <td>{r.description || 'N/A'}</td>
+                    <td>{r.description || "N/A"}</td>
                     <td>
                       <span className={`status ${r.status.toLowerCase()}`}>
                         {r.status}
                       </span>
                     </td>
                     <td>{r.created_at}</td>
-                    <td>{r.admin_notes || 'N/A'}</td>
+                    <td>{r.admin_notes || "N/A"}</td>
                     <td>
-                      {r.status === 'pending' && (
+                      {r.status === "pending" && (
                         <div className="report-actions">
                           <button
-                            onClick={() => handleReportAction(r.id, 'investigating', 'Under investigation')}
+                            onClick={() =>
+                              handleReportAction(
+                                r.id,
+                                "investigating",
+                                "Under investigation"
+                              )
+                            }
                             className="btn-investigate"
                           >
                             Investigate
                           </button>
                           <button
-                            onClick={() => handleReportAction(r.id, 'resolved', 'Issue resolved')}
+                            onClick={() =>
+                              handleReportAction(
+                                r.id,
+                                "resolved",
+                                "Issue resolved"
+                              )
+                            }
                             className="btn-resolve"
                           >
                             Resolve
                           </button>
                           <button
-                            onClick={() => handleReportAction(r.id, 'dismissed', 'Report dismissed')}
+                            onClick={() =>
+                              handleReportAction(
+                                r.id,
+                                "dismissed",
+                                "Report dismissed"
+                              )
+                            }
                             className="btn-dismiss"
                           >
                             Dismiss
@@ -397,14 +466,78 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      {activeTab === 'database' && (
+      {activeTab === "verification" && (
+        <div className="verification-container">
+          <h2>Vendor Profile Verification</h2>
+          {pendingVendors.length === 0 ? (
+            <p>No pending vendor verifications.</p>
+          ) : (
+            <div className="verification-grid">
+              {pendingVendors.map((vendor) => (
+                <div key={vendor.id} className="verification-card">
+                  <div className="vendor-image-container">
+                    {vendor.profile_image ? (
+                      <img
+                        src={
+                          vendor.profile_image.startsWith("data:")
+                            ? vendor.profile_image
+                            : `data:image/jpeg;base64,${vendor.profile_image}`
+                        }
+                        alt={vendor.username}
+                        className="vendor-profile-image"
+                      />
+                    ) : (
+                      <div className="no-image">No Image</div>
+                    )}
+                  </div>
+                  <div className="vendor-verification-info">
+                    <h3>{vendor.username}</h3>
+                    <p>
+                      <strong>Email:</strong> {vendor.email}
+                    </p>
+                    <p>
+                      <strong>M-Pesa:</strong>{" "}
+                      {vendor.mpesa_number || "Not provided"}
+                    </p>
+                    <p>
+                      <strong>Payment Pref:</strong>{" "}
+                      {vendor.payment_preference === "after_order"
+                        ? "After Each Order"
+                        : "Monthly"}
+                    </p>
+                    <p className="verification-status">
+                      Status: <span className="unverified">Pending Review</span>
+                    </p>
+                  </div>
+                  <div className="verification-actions">
+                    <button
+                      onClick={() => handleVerifyVendor(vendor.id, true)}
+                      className="btn-approve"
+                    >
+                      ✓ Approve
+                    </button>
+                    <button
+                      onClick={() => handleVerifyVendor(vendor.id, false)}
+                      className="btn-reject"
+                    >
+                      ✗ Reject
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === "database" && (
         <div className="database-container">
           <h2>Database Management</h2>
 
           <div className="database-section">
             <h3>Databases</h3>
             <div className="database-list">
-              {databases.map(db => (
+              {databases.map((db) => (
                 <div key={db.name} className="database-item">
                   <h4>{db.name}</h4>
                   <p>Owner: {db.owner}</p>
@@ -416,12 +549,16 @@ const AdminDashboard = () => {
 
           <div className="database-section">
             <h3>Tables</h3>
-            <button onClick={fetchTables} className="btn-primary">Load Tables</button>
+            <button onClick={fetchTables} className="btn-primary">
+              Load Tables
+            </button>
             <div className="table-list">
-              {tables.map(table => (
+              {tables.map((table) => (
                 <div
                   key={table.name}
-                  className={`table-item ${selectedTable?.name === table.name ? 'selected' : ''}`}
+                  className={`table-item ${
+                    selectedTable?.name === table.name ? "selected" : ""
+                  }`}
                   onClick={() => handleTableClick(table)}
                 >
                   <h4>{table.name}</h4>
@@ -450,12 +587,12 @@ const AdminDashboard = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {tableColumns.map(col => (
+                      {tableColumns.map((col) => (
                         <tr key={col.name}>
                           <td>{col.name}</td>
                           <td>{col.data_type}</td>
                           <td>{col.is_nullable}</td>
-                          <td>{col.default_value || 'N/A'}</td>
+                          <td>{col.default_value || "N/A"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -469,7 +606,7 @@ const AdminDashboard = () => {
                       <table className="data-table">
                         <thead>
                           <tr>
-                            {tableData.columns.map(col => (
+                            {tableData.columns.map((col) => (
                               <th key={col}>{col}</th>
                             ))}
                           </tr>
@@ -479,7 +616,7 @@ const AdminDashboard = () => {
                             <tr key={index}>
                               {row.map((cell, cellIndex) => (
                                 <td key={cellIndex}>
-                                  {cell === null ? 'NULL' : String(cell)}
+                                  {cell === null ? "NULL" : String(cell)}
                                 </td>
                               ))}
                             </tr>
@@ -691,7 +828,7 @@ const AdminDashboard = () => {
         }
         .table-item:hover {
           border-color: #007bff;
-          box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+          box-shadow: 0 2px 4px rgba(0, 123, 255, 0.1);
         }
         .table-item.selected {
           border-color: #007bff;
@@ -754,6 +891,100 @@ const AdminDashboard = () => {
         }
         .btn-primary:hover {
           background-color: #0056b3;
+        }
+        .verification-container {
+          padding: 20px;
+        }
+        .verification-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+          gap: 20px;
+          margin-top: 20px;
+        }
+        .verification-card {
+          border: 2px solid #ddd;
+          border-radius: 8px;
+          padding: 20px;
+          background-color: #fff;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+          transition: all 0.3s ease;
+        }
+        .verification-card:hover {
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          border-color: #007bff;
+        }
+        .vendor-image-container {
+          margin-bottom: 15px;
+          text-align: center;
+        }
+        .vendor-profile-image {
+          max-width: 100%;
+          height: 200px;
+          object-fit: cover;
+          border-radius: 8px;
+          border: 2px solid #ddd;
+        }
+        .no-image {
+          height: 200px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #f0f0f0;
+          border-radius: 8px;
+          color: #999;
+          font-weight: 600;
+        }
+        .vendor-verification-info {
+          margin-bottom: 15px;
+        }
+        .vendor-verification-info h3 {
+          margin: 0 0 10px 0;
+          color: #333;
+        }
+        .vendor-verification-info p {
+          margin: 5px 0;
+          font-size: 14px;
+          color: #666;
+        }
+        .verification-status {
+          margin-top: 10px !important;
+          font-weight: 600 !important;
+        }
+        .unverified {
+          background-color: #fff3cd;
+          color: #856404;
+          padding: 4px 8px;
+          border-radius: 4px;
+        }
+        .verification-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 15px;
+        }
+        .btn-approve,
+        .btn-reject {
+          flex: 1;
+          padding: 10px;
+          border: none;
+          border-radius: 4px;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 14px;
+          transition: all 0.3s ease;
+        }
+        .btn-approve {
+          background-color: #28a745;
+          color: white;
+        }
+        .btn-approve:hover {
+          background-color: #218838;
+        }
+        .btn-reject {
+          background-color: #dc3545;
+          color: white;
+        }
+        .btn-reject:hover {
+          background-color: #c82333;
         }
       `}</style>
     </div>

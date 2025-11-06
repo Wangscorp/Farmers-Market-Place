@@ -1,16 +1,18 @@
-import { useState, useEffect } from 'react';
-import axios from '../api';
-import ImageUploadWithResize from './ImageUploadWithResize';
-import { useUser } from './UserContext';
-import './VendorDashboard.css';
+import { useState, useEffect } from "react";
+import axios from "../api";
+import ImageUploadWithResize from "./ImageUploadWithResize";
+import VerificationUpload from "./VerificationUpload";
+import { useUser } from "../hooks/useUser";
+import "./VendorDashboard.css";
 
 const VendorDashboard = () => {
   const { user } = useUser();
   const [products, setProducts] = useState([]);
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('');
-  const [description, setDescription] = useState('');
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [resizedImage, setResizedImage] = useState(null);
   const [maxWidth, setMaxWidth] = useState(800);
   const [maxHeight, setMaxHeight] = useState(600);
@@ -18,9 +20,11 @@ const VendorDashboard = () => {
   const [showForm, setShowForm] = useState(false);
   const [reportCount, setReportCount] = useState(0);
   const [reportCountLoaded, setReportCountLoaded] = useState(false);
+  const [mpesaNumber, setMpesaNumber] = useState(user?.mpesa_number || "");
+  const [showPhoneForm, setShowPhoneForm] = useState(false);
 
   useEffect(() => {
-    if (user && user.role === 'Vendor' && user.verified) {
+    if (user && user.role === "Vendor" && user.verified) {
       fetchReportCount();
       fetchProducts();
     }
@@ -28,20 +32,20 @@ const VendorDashboard = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get('/products');
+      const response = await axios.get("/products");
       setProducts(response.data);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error("Error fetching products:", error);
     }
   };
 
   const fetchReportCount = async () => {
     try {
-      const response = await axios.get('/vendor/reports/count');
+      const response = await axios.get("/vendor/reports/count");
       setReportCount(response.data.report_count);
       setReportCountLoaded(true);
     } catch (error) {
-      console.error('Error fetching report count:', error);
+      console.error("Error fetching report count:", error);
     }
   };
 
@@ -54,7 +58,7 @@ const VendorDashboard = () => {
 
     // Check if image is required for new products
     if (!editingProduct && !resizedImage) {
-      alert('Please upload a product image before submitting.');
+      alert("Please upload a product image before submitting.");
       return;
     }
 
@@ -66,35 +70,41 @@ const VendorDashboard = () => {
           price: parseFloat(price),
           category,
           description,
+          quantity: parseInt(quantity),
           image: resizedImage,
         });
-        alert('Product updated successfully!');
+        alert("Product updated successfully!");
       } else {
         // Create new product
-        await axios.post('/products', {
+        await axios.post("/products", {
           name,
           price: parseFloat(price),
           category,
           description,
+          quantity: parseInt(quantity),
           image: resizedImage,
         });
-        alert('Product created successfully!');
+        alert("Product created successfully!");
       }
 
       // Reset form
       resetForm();
       fetchProducts();
     } catch (error) {
-      console.error('Error saving product:', error);
-      let errorMessage = 'Error saving product';
+      console.error("Error saving product:", error);
+      let errorMessage = "Error saving product";
 
       if (error.response) {
         // Server responded with error status
         if (error.response.status === 413) {
-          errorMessage = 'Image file is too large. Please select a smaller image.';
+          errorMessage =
+            "Image file is too large. Please select a smaller image.";
         } else if (error.response.status === 422) {
-          errorMessage = 'Invalid product data. Please check your input.';
-        } else if (error.response.data && typeof error.response.data === 'string') {
+          errorMessage = "Invalid product data. Please check your input.";
+        } else if (
+          error.response.data &&
+          typeof error.response.data === "string"
+        ) {
           errorMessage = error.response.data;
         } else if (error.response.data?.message) {
           errorMessage = error.response.data.message;
@@ -103,10 +113,11 @@ const VendorDashboard = () => {
         }
       } else if (error.request) {
         // Network error
-        errorMessage = 'Network error. Please check your connection and try again.';
+        errorMessage =
+          "Network error. Please check your connection and try again.";
       } else {
         // Other error
-        errorMessage = 'An unexpected error occurred: ' + error.message;
+        errorMessage = "An unexpected error occurred: " + error.message;
       }
 
       alert(errorMessage);
@@ -114,10 +125,11 @@ const VendorDashboard = () => {
   };
 
   const resetForm = () => {
-    setName('');
-    setPrice('');
-    setCategory('');
-    setDescription('');
+    setName("");
+    setPrice("");
+    setCategory("");
+    setDescription("");
+    setQuantity("");
     setResizedImage(null);
     setEditingProduct(null);
     setShowForm(false);
@@ -129,31 +141,80 @@ const VendorDashboard = () => {
     setPrice(product.price.toString());
     setCategory(product.category);
     setDescription(product.description);
+    setQuantity(product.quantity.toString());
     setResizedImage(product.image);
     setShowForm(true);
   };
 
   const handleDelete = async (productId) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) {
+    if (!window.confirm("Are you sure you want to delete this product?")) {
       return;
     }
-    
+
     try {
       await axios.delete(`/products/${productId}`);
-      alert('Product deleted successfully!');
+      alert("Product deleted successfully!");
       fetchProducts();
     } catch (error) {
-      alert('Error deleting product: ' + (error.response?.data || error.message));
+      alert(
+        "Error deleting product: " + (error.response?.data || error.message)
+      );
+    }
+  };
+
+  const handleUpdatePhoneNumber = async () => {
+    if (!user) {
+      alert("You must be logged in to update your phone number");
+      return;
+    }
+
+    if (!mpesaNumber.trim()) {
+      alert("Please enter your M-Pesa number for payment processing");
+      return;
+    }
+
+    if (!/^(07\d{8}|011\d{7,8}|\+254\d{9})$/.test(mpesaNumber)) {
+      alert(
+        "Please enter a valid M-Pesa number (07XXXXXXXX, 011XXXXXXXX, or +254XXXXXXXXX)"
+      );
+      return;
+    }
+
+    try {
+      await axios.patch("/profile", {
+        username: user.username,
+        email: user.email,
+        mpesa_number: mpesaNumber,
+      });
+      alert("Phone number updated successfully!");
+      setShowPhoneForm(false);
+    } catch (error) {
+      console.error("Error updating phone number:", error);
+      const errorMessage =
+        error.response?.data ||
+        (error.message === "Network Error"
+          ? "Network error - please check your connection"
+          : error.message) ||
+        "Unknown error occurred";
+      alert("Failed to update phone number: " + errorMessage);
     }
   };
 
   // Only allow vendors to access this dashboard
   if (!user) {
-    return <div className="access-denied">Please log in to access the Vendor Dashboard.</div>;
+    return (
+      <div className="access-denied">
+        Please log in to access the Vendor Dashboard.
+      </div>
+    );
   }
 
-  if (user.role !== 'Vendor') {
-    return <div className="access-denied">Access denied. Vendor privileges required.</div>;
+  if (user.role !== "Vendor") {
+    return (
+      <div className="access-denied">
+        Access denied. Vendor privileges required.
+      </div>
+    );
   }
 
   // Check if vendor is verified
@@ -163,7 +224,8 @@ const VendorDashboard = () => {
         <div className="dashboard-header">
           <h2>Vendor Dashboard</h2>
           <p className="verification-status unverified">
-            ⚠ Your account is pending verification. Only verified vendors can manage products.
+            ⚠ Your account is pending verification. Only verified vendors can
+            manage products.
           </p>
           <p>Please contact an administrator to verify your account.</p>
         </div>
@@ -181,7 +243,8 @@ const VendorDashboard = () => {
             ✓ Account Status: Verified
           </p>
           <p className="verification-status unverified">
-            ⚠ Account suspended due to {reportCount} customer reports. Vendors with 5+ reports cannot manage products.
+            ⚠ Account suspended due to {reportCount} customer reports. Vendors
+            with 5+ reports cannot manage products.
           </p>
           <p>Please contact an administrator regarding your account status.</p>
         </div>
@@ -193,23 +256,72 @@ const VendorDashboard = () => {
     <div className="vendor-dashboard">
       <div className="dashboard-header">
         <h2>Vendor Dashboard</h2>
-        <p className={`verification-status ${user?.verified ? 'verified' : 'unverified'}`}>
-          Account Status: {user?.verified ? "✓ Verified" : "⚠ Pending Verification"}
+        <p
+          className={`verification-status ${
+            user?.verified ? "verified" : "unverified"
+          }`}
+        >
+          Account Status:{" "}
+          {user?.verified ? "✓ Verified" : "⚠ Pending Verification"}
         </p>
       </div>
 
+      {/* Verification Upload Section - Only show if not verified */}
+      {!user?.verified && <VerificationUpload />}
+
       <div className="dashboard-actions">
-        <button 
-          className="btn-primary" 
-          onClick={() => setShowForm(!showForm)}
+        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+          {showForm ? "Hide Form" : "+ Add New Product"}
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => setShowPhoneForm(!showPhoneForm)}
         >
-          {showForm ? 'Hide Form' : '+ Add New Product'}
+          {showPhoneForm ? "Hide Phone Settings" : "📱 Update Phone Number"}
         </button>
       </div>
 
+      {showPhoneForm && (
+        <div className="phone-form-container">
+          <h3>Update Phone Number</h3>
+          <p>Update your M-Pesa number for payment processing:</p>
+          <div className="form-group">
+            <label htmlFor="mpesaNumber">M-Pesa Number *</label>
+            <input
+              id="mpesaNumber"
+              type="tel"
+              placeholder="07XXXXXXXX or +254XXXXXXXXX"
+              value={mpesaNumber}
+              onChange={(e) => setMpesaNumber(e.target.value)}
+              title="Enter a valid M-Pesa number: 07XXXXXXXX, 011XXXXXXXX, or +254XXXXXXXXX"
+              required
+            />
+            <p className="info-text">
+              Current: {user?.mpesa_number || "Not set"}
+            </p>
+          </div>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleUpdatePhoneNumber}
+            >
+              Update Phone Number
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowPhoneForm(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div className="product-form-container">
-          <h3>{editingProduct ? 'Edit Product' : 'Add New Product'}</h3>
+          <h3>{editingProduct ? "Edit Product" : "Add New Product"}</h3>
           <form onSubmit={handleSubmit} className="product-form">
             <div className="form-group">
               <label htmlFor="name">Product Name *</label>
@@ -232,6 +344,19 @@ const VendorDashboard = () => {
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 step="0.01"
+                min="0"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="quantity">Quantity Available *</label>
+              <input
+                id="quantity"
+                type="number"
+                placeholder="e.g., 50"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
                 min="0"
                 required
               />
@@ -287,11 +412,21 @@ const VendorDashboard = () => {
             </div>
 
             <div className="form-group">
-              <label>Product Image</label>
-              <ImageUploadWithResize 
-                maxWidth={maxWidth} 
-                maxHeight={maxHeight} 
-                onImageResize={handleImageResize} 
+              <label>Product Image *</label>
+              <p
+                style={{
+                  fontSize: "0.9rem",
+                  color: "#666",
+                  marginBottom: "10px",
+                }}
+              >
+                Upload a high-quality image of your product. It will be
+                automatically resized and optimized.
+              </p>
+              <ImageUploadWithResize
+                maxWidth={maxWidth}
+                maxHeight={maxHeight}
+                onImageResize={handleImageResize}
               />
               {resizedImage && (
                 <div className="image-preview">
@@ -302,9 +437,13 @@ const VendorDashboard = () => {
 
             <div className="form-actions">
               <button type="submit" className="btn-primary">
-                {editingProduct ? 'Update Product' : 'Create Product'}
+                {editingProduct ? "Update Product" : "Create Product"}
               </button>
-              <button type="button" className="btn-secondary" onClick={resetForm}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetForm}
+              >
                 Cancel
               </button>
             </div>
@@ -329,19 +468,21 @@ const VendorDashboard = () => {
                 )}
                 <div className="product-details">
                   <h4>{product.name}</h4>
-                  <p className="product-price">KSH {product.price.toFixed(2)}</p>
+                  <p className="product-price">
+                    KSH {product.price.toFixed(2)}
+                  </p>
                   <p className="product-category">{product.category}</p>
                   <p className="product-description">{product.description}</p>
                 </div>
                 <div className="product-actions">
-                  <button 
-                    className="btn-edit" 
+                  <button
+                    className="btn-edit"
                     onClick={() => handleEdit(product)}
                   >
                     Edit
                   </button>
-                  <button 
-                    className="btn-delete" 
+                  <button
+                    className="btn-delete"
                     onClick={() => handleDelete(product.id)}
                   >
                     Delete

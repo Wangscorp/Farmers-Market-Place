@@ -64,3 +64,7 @@ playwright-report/
 # Screenshots or attachments that might be in issues
 *.png.tmp
 *.jpg.tmp
+
+# Hide all .md files except README.md
+*.md
+!README.md
