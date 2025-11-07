@@ -12,6 +12,7 @@ use std::io;
 mod db;      // Database initialization and connection
 mod models;  // Data models for the application
 mod routes;  // HTTP route handlers
+mod mpesa;   // M-Pesa Daraja API integration
 
 /**
  * Main application entry point

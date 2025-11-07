@@ -7,10 +7,12 @@
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest};
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, MpesaCallbackRequest};
 use crate::db;  // Database helper functions
+use crate::mpesa::{MpesaClient, MpesaConfig, StkCallbackBody, extract_callback_data, PaymentStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::OnceLock;
 
 /**
  * GET /products - Retrieve all available products
@@ -298,11 +300,26 @@ async fn remove_from_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgP
     }
 }
 
+// Global M-Pesa client instance
+static MPESA_CLIENT: OnceLock<Option<MpesaClient>> = OnceLock::new();
+
+fn get_mpesa_client() -> Option<&'static MpesaClient> {
+    MPESA_CLIENT.get_or_init(|| {
+        match MpesaConfig::from_env() {
+            Ok(config) => Some(MpesaClient::new(config)),
+            Err(e) => {
+                eprintln!("Failed to initialize M-Pesa client: {}", e);
+                None
+            }
+        }
+    }).as_ref()
+}
+
 /**
- * POST /checkout - Process M-Pesa payment
+ * POST /checkout - Process M-Pesa payment using Daraja API
  *
- * Initiates M-Pesa payment for the authenticated customer's cart items.
- * In production, this would integrate with M-Pesa API for STK Push.
+ * Initiates M-Pesa STK Push payment for the authenticated customer's cart items.
+ * Integrates with Safaricom's M-Pesa Daraja API for real payments.
  *
  * @param req - HTTP request for authentication
  * @param pool - Database connection pool
@@ -316,9 +333,10 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
         Err(response) => return Ok(response),
     };
 
-    // Validate M-Pesa number format (Kenyan format: 07XXXXXXXX)
-    if !checkout_req.mpesa_number.starts_with("07") || checkout_req.mpesa_number.len() != 10 {
-        return Ok(HttpResponse::BadRequest().json("Invalid M-Pesa number format. Must be 07XXXXXXXX"));
+    // Validate M-Pesa number format (Kenyan format: 07XXXXXXXX or 254XXXXXXXXX)
+    let phone_number = &checkout_req.mpesa_number;
+    if !phone_number.starts_with("07") && !phone_number.starts_with("254") && !phone_number.starts_with("+254") {
+        return Ok(HttpResponse::BadRequest().json("Invalid M-Pesa number format. Use 07XXXXXXXX, 254XXXXXXXXX, or +254XXXXXXXXX"));
     }
 
     // Get user's cart items to verify they have items
@@ -338,49 +356,105 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
                 return Ok(HttpResponse::BadRequest().json("Total amount mismatch"));
             }
 
-            // Generate transaction ID (in production, this would come from M-Pesa)
-            let transaction_id = format!("TXN_{}_{}", user_id, chrono::Utc::now().timestamp());
-
-            // In a real implementation, you would:
-            // 1. Call M-Pesa STK Push API
-            // 2. Store transaction in database
-            // 3. Handle payment confirmation callback
-            // 4. Clear cart only after successful payment
-
-            // Create shipping orders for each cart item
-            for item in &cart_items {
-                match db::create_shipping_order(&pool, user_id, item.product_id, item.quantity, "Default shipping address - please update in your orders").await {
-                    Ok(_) => {},
-                    Err(e) => {
-                        eprintln!("Failed to create shipping order for product {}: {:?}", item.product_id, e);
-                        // Continue with other orders even if one fails
-                    }
+            // Get M-Pesa client
+            let mpesa_client = match get_mpesa_client() {
+                Some(client) => client,
+                None => {
+                    // Fallback to demo mode if M-Pesa is not configured
+                    println!("M-Pesa not configured, using demo mode");
+                    return demo_checkout(pool, user_id, &cart_items, &checkout_req).await;
                 }
-            }
-
-            // Clear the cart after successful checkout
-            for item in &cart_items {
-                match db::remove_from_cart_with_user(&pool, item.id, user_id).await {
-                    Ok(_) => {},
-                    Err(e) => eprintln!("Failed to remove cart item {}: {:?}", item.id, e),
-                }
-            }
-
-            // For demo purposes, simulate successful payment initiation
-            let response = CheckoutResponse {
-                transaction_id: transaction_id.clone(),
-                message: "M-Pesa payment initiated. Check your phone for the STK push prompt. Your orders have been created and will be processed once payment is confirmed.".to_string(),
-                status: "initiated".to_string(),
             };
 
-            // Log the transaction (in production, save to database)
-            println!("M-Pesa payment initiated - User: {}, Phone: {}, Amount: {:.2}, Transaction: {}",
-                    user_id, checkout_req.mpesa_number, checkout_req.total_amount, transaction_id);
+            // Initiate STK Push
+            let account_reference = format!("ORDER_{}", user_id);
+            let transaction_desc = "Farmers Market Place Purchase";
 
-            Ok(HttpResponse::Ok().json(response))
+            match mpesa_client.stk_push(
+                phone_number.clone(),
+                checkout_req.total_amount,
+                account_reference,
+                transaction_desc.to_string(),
+            ).await {
+                Ok(stk_response) => {
+                    // Store transaction in database
+                    match db::create_payment_transaction(
+                        &pool,
+                        user_id,
+                        &stk_response.checkout_request_i_d,
+                        &stk_response.merchant_request_i_d,
+                        phone_number,
+                        checkout_req.total_amount,
+                    ).await {
+                        Ok(_) => {
+                            println!("Payment transaction created: {}", stk_response.checkout_request_i_d);
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to store payment transaction: {:?}", e);
+                        }
+                    }
+
+                    let response = CheckoutResponse {
+                        transaction_id: stk_response.checkout_request_i_d,
+                        message: stk_response.customer_message,
+                        status: "initiated".to_string(),
+                    };
+
+                    Ok(HttpResponse::Ok().json(response))
+                }
+                Err(e) => {
+                    eprintln!("STK Push failed: {:?}", e);
+                    Ok(HttpResponse::InternalServerError().json(json!({
+                        "error": "Payment initiation failed",
+                        "message": "Unable to process M-Pesa payment at this time. Please try again later."
+                    })))
+                }
+            }
         }
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch cart items")),
     }
+}
+
+/**
+ * Fallback demo checkout when M-Pesa is not configured
+ */
+async fn demo_checkout(
+    pool: web::Data<PgPool>,
+    user_id: i32,
+    cart_items: &[crate::models::CartItem],
+    checkout_req: &CheckoutRequest,
+) -> ActixResult<HttpResponse> {
+    // Generate transaction ID (demo mode)
+    let transaction_id = format!("DEMO_TXN_{}_{}", user_id, chrono::Utc::now().timestamp());
+
+    // Create shipping orders for each cart item
+    for item in cart_items {
+        match db::create_shipping_order(&pool, user_id, item.product_id, item.quantity, "Default shipping address - please update in your orders").await {
+            Ok(_) => {},
+            Err(e) => {
+                eprintln!("Failed to create shipping order for product {}: {:?}", item.product_id, e);
+            }
+        }
+    }
+
+    // Clear the cart after successful checkout (demo mode)
+    for item in cart_items {
+        match db::remove_from_cart_with_user(&pool, item.id, user_id).await {
+            Ok(_) => {},
+            Err(e) => eprintln!("Failed to remove cart item {}: {:?}", item.id, e),
+        }
+    }
+
+    let response = CheckoutResponse {
+        transaction_id: transaction_id.clone(),
+        message: "DEMO MODE: Payment simulated successfully. Your orders have been created.".to_string(),
+        status: "completed".to_string(),
+    };
+
+    println!("Demo payment completed - User: {}, Phone: {}, Amount: {:.2}, Transaction: {}",
+            user_id, checkout_req.mpesa_number, checkout_req.total_amount, transaction_id);
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
 // Auth helpers
@@ -1534,6 +1608,143 @@ async fn get_vendor_profile_route(
 }
 
 /**
+ * POST /mpesa/callback - Handle M-Pesa payment callbacks
+ *
+ * Processes payment confirmation callbacks from Safaricom's M-Pesa Daraja API.
+ * Updates payment status and creates shipping orders upon successful payment.
+ *
+ * @param pool - Database connection pool
+ * @param callback_data - JSON callback data from M-Pesa
+ * @returns JSON response acknowledging callback
+ */
+#[post("/mpesa/callback")]
+async fn mpesa_callback(
+    pool: web::Data<PgPool>,
+    callback_data: web::Json<StkCallbackBody>
+) -> ActixResult<HttpResponse> {
+    println!("M-Pesa callback received: {:?}", callback_data);
+
+    let callback = &callback_data.stk_callback;
+    let checkout_request_id = &callback.checkout_request_i_d;
+
+    // Get payment transaction from database
+    let transaction = match db::get_payment_transaction_by_checkout_request_id(&pool, checkout_request_id).await {
+        Ok(t) => t,
+        Err(_) => {
+            eprintln!("Transaction not found for checkout_request_id: {}", checkout_request_id);
+            return Ok(HttpResponse::Ok().json(json!({"ResultCode": 0, "ResultDesc": "Accepted"})));
+        }
+    };
+
+    let status = if callback.result_code == 0 {
+        // Payment successful
+        println!("Payment successful for checkout_request_id: {}", checkout_request_id);
+        
+        // Extract payment details
+        let (mpesa_receipt, transaction_date, amount) = match extract_callback_data(callback) {
+            Some(data) => (Some(data.0.as_str()), Some(data.1.as_str()), data.2),
+            None => (None, None, 0.0),
+        };
+
+        // Update payment transaction
+        if let Err(e) = db::update_payment_transaction(
+            &pool,
+            checkout_request_id,
+            &PaymentStatus::Completed.to_string(),
+            mpesa_receipt,
+            transaction_date,
+        ).await {
+            eprintln!("Failed to update payment transaction: {:?}", e);
+        }
+
+        // Get user's cart and create shipping orders
+        match db::get_cart_items(&pool, transaction.user_id).await {
+            Ok(cart_items) => {
+                // Create shipping orders for each cart item
+                for item in &cart_items {
+                    match db::create_shipping_order(
+                        &pool,
+                        transaction.user_id,
+                        item.product_id,
+                        item.quantity,
+                        "Default shipping address - please update in your orders"
+                    ).await {
+                        Ok(_) => println!("Shipping order created for product {}", item.product_id),
+                        Err(e) => eprintln!("Failed to create shipping order: {:?}", e),
+                    }
+                }
+
+                // Clear the cart after successful payment
+                for item in &cart_items {
+                    if let Err(e) = db::remove_from_cart_with_user(&pool, item.id, transaction.user_id).await {
+                        eprintln!("Failed to remove cart item {}: {:?}", item.id, e);
+                    }
+                }
+            }
+            Err(e) => eprintln!("Failed to get cart items: {:?}", e),
+        }
+
+        PaymentStatus::Completed.to_string()
+    } else {
+        // Payment failed or cancelled
+        println!("Payment failed/cancelled for checkout_request_id: {}, result_code: {}", 
+                checkout_request_id, callback.result_code);
+        
+        let status = if callback.result_code == 1032 {
+            PaymentStatus::Cancelled.to_string()
+        } else {
+            PaymentStatus::Failed.to_string()
+        };
+
+        // Update payment transaction status
+        if let Err(e) = db::update_payment_transaction(
+            &pool,
+            checkout_request_id,
+            &status,
+            None,
+            None,
+        ).await {
+            eprintln!("Failed to update payment transaction: {:?}", e);
+        }
+
+        status
+    };
+
+    println!("Payment status updated to: {} for transaction: {}", status, checkout_request_id);
+
+    // Respond to M-Pesa with acknowledgment
+    Ok(HttpResponse::Ok().json(json!({
+        "ResultCode": 0,
+        "ResultDesc": "Accepted"
+    })))
+}
+
+/**
+ * GET /payments/history - Get user's payment history
+ *
+ * Retrieves payment transaction history for the authenticated user.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON array of payment transactions
+ */
+#[get("/payments/history")]
+async fn get_payment_history(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_user_payment_transactions(&pool, user_id).await {
+        Ok(transactions) => Ok(HttpResponse::Ok().json(transactions)),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch payment history")),
+    }
+}
+
+/**
  * Initialize route configuration
  *
  * Registers all HTTP route handlers with the Actix-Web service configuration.
@@ -1559,6 +1770,10 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(update_cart_item)
         .service(remove_from_cart_route)
         .service(checkout);
+
+    // M-Pesa payment routes
+    cfg.service(mpesa_callback)
+        .service(get_payment_history);
 
     // Message routes
     cfg.service(send_message_route)

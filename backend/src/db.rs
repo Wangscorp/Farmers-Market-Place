@@ -201,6 +201,28 @@ pub async fn init_db() -> PgPool {
     .await
     .expect("Failed to create messages table");
 
+    // Create payment_transactions table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS payment_transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            checkout_request_id VARCHAR(255) UNIQUE NOT NULL,
+            merchant_request_id VARCHAR(255) NOT NULL,
+            mpesa_receipt_number VARCHAR(255),
+            phone_number VARCHAR(20) NOT NULL,
+            amount FLOAT8 NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'initiated', -- 'initiated', 'completed', 'failed', 'cancelled'
+            transaction_date VARCHAR(50),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create payment_transactions table");
+
     // Create default admin user if not exists
     let admin_exists: (bool,) = sqlx::query_as(
         "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
@@ -1747,4 +1769,112 @@ pub async fn get_vendor_profile(pool: &PgPool, vendor_id: i32) -> Result<VendorP
         total_revenue,
         follower_count,
     })
+}
+
+// Payment Transaction Functions
+
+pub async fn create_payment_transaction(
+    pool: &PgPool,
+    user_id: i32,
+    checkout_request_id: &str,
+    merchant_request_id: &str,
+    phone_number: &str,
+    amount: f64,
+) -> Result<i32, sqlx::Error> {
+    let row = sqlx::query!(
+        "INSERT INTO payment_transactions (user_id, checkout_request_id, merchant_request_id, phone_number, amount) 
+         VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        user_id,
+        checkout_request_id,
+        merchant_request_id,
+        phone_number,
+        amount
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(row.id)
+}
+
+pub async fn update_payment_transaction(
+    pool: &PgPool,
+    checkout_request_id: &str,
+    status: &str,
+    mpesa_receipt_number: Option<&str>,
+    transaction_date: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE payment_transactions SET status = $1, mpesa_receipt_number = $2, 
+         transaction_date = $3, updated_at = CURRENT_TIMESTAMP 
+         WHERE checkout_request_id = $4",
+        status,
+        mpesa_receipt_number,
+        transaction_date,
+        checkout_request_id
+    )
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn get_payment_transaction_by_checkout_request_id(
+    pool: &PgPool,
+    checkout_request_id: &str,
+) -> Result<crate::models::PaymentTransaction, sqlx::Error> {
+    let row = sqlx::query!(
+        "SELECT id, user_id, checkout_request_id, merchant_request_id, mpesa_receipt_number,
+         phone_number, amount, status, transaction_date, 
+         created_at::text, updated_at::text
+         FROM payment_transactions WHERE checkout_request_id = $1",
+        checkout_request_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(crate::models::PaymentTransaction {
+        id: row.id,
+        user_id: row.user_id,
+        checkout_request_id: row.checkout_request_id,
+        merchant_request_id: row.merchant_request_id,
+        mpesa_receipt_number: row.mpesa_receipt_number,
+        phone_number: row.phone_number,
+        amount: row.amount,
+        status: row.status,
+        transaction_date: row.transaction_date,
+        created_at: row.created_at.unwrap_or_default(),
+        updated_at: row.updated_at.unwrap_or_default(),
+    })
+}
+
+pub async fn get_user_payment_transactions(
+    pool: &PgPool,
+    user_id: i32,
+) -> Result<Vec<crate::models::PaymentTransaction>, sqlx::Error> {
+    let rows = sqlx::query!(
+        "SELECT id, user_id, checkout_request_id, merchant_request_id, mpesa_receipt_number,
+         phone_number, amount, status, transaction_date, 
+         created_at::text, updated_at::text
+         FROM payment_transactions WHERE user_id = $1 ORDER BY created_at DESC",
+        user_id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| crate::models::PaymentTransaction {
+            id: row.id,
+            user_id: row.user_id,
+            checkout_request_id: row.checkout_request_id,
+            merchant_request_id: row.merchant_request_id,
+            mpesa_receipt_number: row.mpesa_receipt_number,
+            phone_number: row.phone_number,
+            amount: row.amount,
+            status: row.status,
+            transaction_date: row.transaction_date,
+            created_at: row.created_at.unwrap_or_default(),
+            updated_at: row.updated_at.unwrap_or_default(),
+        })
+        .collect())
 }

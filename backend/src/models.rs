@@ -240,6 +240,26 @@ pub struct VendorVerification {
     pub payment_preference: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PaymentTransaction {
+    pub id: i32,
+    pub user_id: i32,
+    pub checkout_request_id: String,
+    pub merchant_request_id: String,
+    pub mpesa_receipt_number: Option<String>,
+    pub phone_number: String,
+    pub amount: f64,
+    pub status: String, // initiated, completed, failed, cancelled
+    pub transaction_date: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MpesaCallbackRequest {
+    pub body: serde_json::Value,
+}
+
 pub fn create_jwt(user: &User) -> Result<String, Error> {
     let claims = Claims::new(user);
     encode(&Header::default(), &claims, &EncodingKey::from_secret(JWT_SECRET.as_ref()))
