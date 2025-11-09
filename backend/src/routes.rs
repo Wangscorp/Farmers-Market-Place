@@ -7,7 +7,7 @@
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, MpesaCallbackRequest};
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest};
 use crate::db;  // Database helper functions
 use crate::mpesa::{MpesaClient, MpesaConfig, StkCallbackBody, extract_callback_data, PaymentStatus};
 use serde::{Deserialize, Serialize};
@@ -341,12 +341,25 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
 
     // Get user's cart items to verify they have items
     match db::get_cart_items(&pool, user_id).await {
-        Ok(cart_items) => {
-            if cart_items.is_empty() {
+        Ok(all_cart_items) => {
+            if all_cart_items.is_empty() {
                 return Ok(HttpResponse::BadRequest().json("Cart is empty"));
             }
 
-            // Calculate total from cart items to verify with request
+            // Filter cart items based on selected_items if provided
+            let cart_items: Vec<_> = if let Some(selected) = &checkout_req.selected_items {
+                all_cart_items.into_iter()
+                    .filter(|item| selected.contains(&item.id))
+                    .collect()
+            } else {
+                all_cart_items
+            };
+
+            if cart_items.is_empty() {
+                return Ok(HttpResponse::BadRequest().json("No valid items selected for checkout"));
+            }
+
+            // Calculate total from selected cart items to verify with request
             let calculated_total: f64 = cart_items.iter()
                 .map(|item| item.product.price * item.quantity as f64)
                 .sum();
@@ -1641,8 +1654,8 @@ async fn mpesa_callback(
         println!("Payment successful for checkout_request_id: {}", checkout_request_id);
         
         // Extract payment details
-        let (mpesa_receipt, transaction_date, amount) = match extract_callback_data(callback) {
-            Some(data) => (Some(data.0.as_str()), Some(data.1.as_str()), data.2),
+        let (mpesa_receipt, transaction_date, _amount) = match extract_callback_data(callback) {
+            Some(data) => (Some(data.0), Some(data.1), data.2),
             None => (None, None, 0.0),
         };
 
@@ -1651,8 +1664,8 @@ async fn mpesa_callback(
             &pool,
             checkout_request_id,
             &PaymentStatus::Completed.to_string(),
-            mpesa_receipt,
-            transaction_date,
+            mpesa_receipt.as_deref(),
+            transaction_date.as_deref(),
         ).await {
             eprintln!("Failed to update payment transaction: {:?}", e);
         }

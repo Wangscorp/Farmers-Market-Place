@@ -13,6 +13,7 @@
  * 4. Configure shortcode and passkey
  */
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -109,13 +110,13 @@ pub struct StkPushResponse {
     pub customer_message: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct StkCallbackBody {
     pub stk_callback: StkCallback,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct StkCallback {
     pub merchant_request_i_d: String,
@@ -125,13 +126,13 @@ pub struct StkCallback {
     pub callback_metadata: Option<CallbackMetadata>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct CallbackMetadata {
     pub item: Vec<CallbackItem>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct CallbackItem {
     pub name: String,
@@ -181,7 +182,7 @@ impl MpesaClient {
         
         // Create Basic Auth header
         let credentials = format!("{}:{}", self.config.consumer_key, self.config.consumer_secret);
-        let encoded_credentials = base64::encode(credentials);
+        let encoded_credentials = base64::engine::general_purpose::STANDARD.encode(credentials);
         let auth_header = format!("Basic {}", encoded_credentials);
 
         let response = self.client
@@ -202,7 +203,7 @@ impl MpesaClient {
     /// Generate password for STK push request
     fn generate_password(&self, timestamp: &str) -> String {
         let password_string = format!("{}{}{}", self.config.shortcode, self.config.passkey, timestamp);
-        base64::encode(password_string)
+        base64::engine::general_purpose::STANDARD.encode(password_string)
     }
 
     /// Generate timestamp in the required format (YYYYMMDDHHMMSS)

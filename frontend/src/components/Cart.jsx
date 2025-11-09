@@ -6,6 +6,37 @@ const Cart = () => {
   const { cartItems, removeFromCart, updateQuantity, getTotalPrice, loading } =
     useCart();
   const [mpesaNumber, setMpesaNumber] = useState("");
+  const [selectedItems, setSelectedItems] = useState(new Set());
+
+  const handleItemSelect = (itemId, isSelected) => {
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(itemId);
+      } else {
+        newSet.delete(itemId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleRemoveSelected = async () => {
+    if (selectedItems.size === 0) {
+      alert("Please select items to remove");
+      return;
+    }
+
+    try {
+      const removePromises = Array.from(selectedItems).map(itemId =>
+        removeFromCart(itemId)
+      );
+      await Promise.all(removePromises);
+      setSelectedItems(new Set());
+      alert(`${selectedItems.size} item(s) removed from cart`);
+    } catch {
+      alert("Failed to remove some items from cart");
+    }
+  };
 
   const handleRemoveFromCart = async (itemId) => {
     try {
@@ -33,6 +64,15 @@ const Cart = () => {
     }
   };
 
+  const getSelectedTotal = () => {
+    if (selectedItems.size === 0) {
+      return getTotalPrice();
+    }
+    return cartItems
+      .filter(item => selectedItems.has(item.id))
+      .reduce((total, item) => total + item.product.price * item.quantity, 0);
+  };
+
   const handleCheckout = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -51,6 +91,8 @@ const Cart = () => {
         return;
       }
 
+      const selectedItemIds = selectedItems.size > 0 ? Array.from(selectedItems) : null;
+
       const response = await fetch("http://localhost:8080/checkout", {
         method: "POST",
         headers: {
@@ -59,7 +101,8 @@ const Cart = () => {
         },
         body: JSON.stringify({
           mpesa_number: mpesaNumber,
-          total_amount: getTotalPrice(),
+          total_amount: getSelectedTotal(),
+          selected_items: selectedItemIds,
         }),
       });
 
@@ -94,6 +137,12 @@ const Cart = () => {
         <div>
           {cartItems.map((item) => (
             <div key={item.id} className="cart-item">
+              <input
+                type="checkbox"
+                checked={selectedItems.has(item.id)}
+                onChange={(e) => handleItemSelect(item.id, e.target.checked)}
+                className="cart-item-checkbox"
+              />
               {item.product.image && (
                 <img
                   src={
@@ -154,8 +203,23 @@ const Cart = () => {
               </div>
             </div>
           ))}
+          {selectedItems.size > 0 && (
+            <div className="cart-actions">
+              <button
+                className="remove-selected-button"
+                onClick={handleRemoveSelected}
+              >
+                Remove Selected ({selectedItems.size})
+              </button>
+            </div>
+          )}
           <div className="cart-total">
-            <h3>Total: KSh {getTotalPrice().toLocaleString()}</h3>
+            <h3>
+              Total: KSh {getSelectedTotal().toLocaleString()}
+              {selectedItems.size > 0 && selectedItems.size < cartItems.length && (
+                <small> (selected items only)</small>
+              )}
+            </h3>
           </div>
         </div>
       )}

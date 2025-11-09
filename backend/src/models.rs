@@ -114,6 +114,7 @@ pub struct UploadVerificationDocumentRequest {
 pub struct CheckoutRequest {
     pub mpesa_number: String,
     pub total_amount: f64,
+    pub selected_items: Option<Vec<i32>>, // Optional list of cart item IDs to checkout
 }
 
 #[derive(Serialize, Deserialize)]

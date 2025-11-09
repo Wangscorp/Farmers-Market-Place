@@ -1781,19 +1781,19 @@ pub async fn create_payment_transaction(
     phone_number: &str,
     amount: f64,
 ) -> Result<i32, sqlx::Error> {
-    let row = sqlx::query!(
-        "INSERT INTO payment_transactions (user_id, checkout_request_id, merchant_request_id, phone_number, amount) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        user_id,
-        checkout_request_id,
-        merchant_request_id,
-        phone_number,
-        amount
+    let row: (i32,) = sqlx::query_as(
+        "INSERT INTO payment_transactions (user_id, checkout_request_id, merchant_request_id, phone_number, amount)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
+    .bind(user_id)
+    .bind(checkout_request_id)
+    .bind(merchant_request_id)
+    .bind(phone_number)
+    .bind(amount)
     .fetch_one(pool)
     .await?;
 
-    Ok(row.id)
+    Ok(row.0)
 }
 
 pub async fn update_payment_transaction(
@@ -1803,15 +1803,15 @@ pub async fn update_payment_transaction(
     mpesa_receipt_number: Option<&str>,
     transaction_date: Option<&str>,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE payment_transactions SET status = $1, mpesa_receipt_number = $2, 
-         transaction_date = $3, updated_at = CURRENT_TIMESTAMP 
-         WHERE checkout_request_id = $4",
-        status,
-        mpesa_receipt_number,
-        transaction_date,
-        checkout_request_id
+    sqlx::query(
+        "UPDATE payment_transactions SET status = $1, mpesa_receipt_number = $2,
+         transaction_date = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE checkout_request_id = $4"
     )
+    .bind(status)
+    .bind(mpesa_receipt_number)
+    .bind(transaction_date)
+    .bind(checkout_request_id)
     .execute(pool)
     .await?;
 
@@ -1822,28 +1822,28 @@ pub async fn get_payment_transaction_by_checkout_request_id(
     pool: &PgPool,
     checkout_request_id: &str,
 ) -> Result<crate::models::PaymentTransaction, sqlx::Error> {
-    let row = sqlx::query!(
+    let row = sqlx::query(
         "SELECT id, user_id, checkout_request_id, merchant_request_id, mpesa_receipt_number,
-         phone_number, amount, status, transaction_date, 
+         phone_number, amount, status, transaction_date,
          created_at::text, updated_at::text
-         FROM payment_transactions WHERE checkout_request_id = $1",
-        checkout_request_id
+         FROM payment_transactions WHERE checkout_request_id = $1"
     )
+    .bind(checkout_request_id)
     .fetch_one(pool)
     .await?;
 
     Ok(crate::models::PaymentTransaction {
-        id: row.id,
-        user_id: row.user_id,
-        checkout_request_id: row.checkout_request_id,
-        merchant_request_id: row.merchant_request_id,
-        mpesa_receipt_number: row.mpesa_receipt_number,
-        phone_number: row.phone_number,
-        amount: row.amount,
-        status: row.status,
-        transaction_date: row.transaction_date,
-        created_at: row.created_at.unwrap_or_default(),
-        updated_at: row.updated_at.unwrap_or_default(),
+        id: row.try_get("id")?,
+        user_id: row.try_get("user_id")?,
+        checkout_request_id: row.try_get("checkout_request_id")?,
+        merchant_request_id: row.try_get("merchant_request_id")?,
+        mpesa_receipt_number: row.try_get("mpesa_receipt_number")?,
+        phone_number: row.try_get("phone_number")?,
+        amount: row.try_get("amount")?,
+        status: row.try_get("status")?,
+        transaction_date: row.try_get("transaction_date")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
     })
 }
 
@@ -1851,30 +1851,32 @@ pub async fn get_user_payment_transactions(
     pool: &PgPool,
     user_id: i32,
 ) -> Result<Vec<crate::models::PaymentTransaction>, sqlx::Error> {
-    let rows = sqlx::query!(
+    let rows = sqlx::query(
         "SELECT id, user_id, checkout_request_id, merchant_request_id, mpesa_receipt_number,
-         phone_number, amount, status, transaction_date, 
+         phone_number, amount, status, transaction_date,
          created_at::text, updated_at::text
-         FROM payment_transactions WHERE user_id = $1 ORDER BY created_at DESC",
-        user_id
+         FROM payment_transactions WHERE user_id = $1 ORDER BY created_at DESC"
     )
+    .bind(user_id)
     .fetch_all(pool)
     .await?;
 
-    Ok(rows
-        .into_iter()
-        .map(|row| crate::models::PaymentTransaction {
-            id: row.id,
-            user_id: row.user_id,
-            checkout_request_id: row.checkout_request_id,
-            merchant_request_id: row.merchant_request_id,
-            mpesa_receipt_number: row.mpesa_receipt_number,
-            phone_number: row.phone_number,
-            amount: row.amount,
-            status: row.status,
-            transaction_date: row.transaction_date,
-            created_at: row.created_at.unwrap_or_default(),
-            updated_at: row.updated_at.unwrap_or_default(),
-        })
-        .collect())
+    let mut transactions = Vec::new();
+    for row in rows {
+        transactions.push(crate::models::PaymentTransaction {
+            id: row.try_get("id")?,
+            user_id: row.try_get("user_id")?,
+            checkout_request_id: row.try_get("checkout_request_id")?,
+            merchant_request_id: row.try_get("merchant_request_id")?,
+            mpesa_receipt_number: row.try_get("mpesa_receipt_number")?,
+            phone_number: row.try_get("phone_number")?,
+            amount: row.try_get("amount")?,
+            status: row.try_get("status")?,
+            transaction_date: row.try_get("transaction_date")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        });
+    }
+
+    Ok(transactions)
 }
