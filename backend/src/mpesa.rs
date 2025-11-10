@@ -16,6 +16,9 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::env;
+use reqwest;
+use base64;
+use chrono;
 
 // M-Pesa API Configuration
 #[derive(Clone)]
@@ -73,14 +76,12 @@ impl MpesaConfig {
 
 // M-Pesa API Request/Response Models
 
-#[derive(Serialize)]
-pub struct AuthRequest {
-    // This is handled via Basic Auth header, no body needed
-}
+
 
 #[derive(Deserialize)]
 pub struct AuthResponse {
     pub access_token: String,
+    #[allow(dead_code)] // Token expiration time - might be useful for caching in future
     pub expires_in: String,
 }
 

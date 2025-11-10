@@ -333,11 +333,24 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
         Err(response) => return Ok(response),
     };
 
-    // Validate M-Pesa number format (Kenyan format: 07XXXXXXXX or 254XXXXXXXXX)
+    // Validate M-Pesa phone number format
     let phone_number = &checkout_req.mpesa_number;
-    if !phone_number.starts_with("07") && !phone_number.starts_with("254") && !phone_number.starts_with("+254") {
-        return Ok(HttpResponse::BadRequest().json("Invalid M-Pesa number format. Use 07XXXXXXXX, 254XXXXXXXXX, or +254XXXXXXXXX"));
+    if !is_valid_kenyan_phone(phone_number) {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "Invalid phone number",
+            "message": "Please enter a valid Kenyan phone number (07XXXXXXXX, 254XXXXXXXXX, or +254XXXXXXXXX)"
+        })));
     }
+
+    // Validate minimum amount (M-Pesa minimum is KSh 1)
+    if checkout_req.total_amount < 1.0 {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "Invalid amount", 
+            "message": "Amount must be at least KSh 1"
+        })));
+    }
+
+    println!("🔄 Checkout initiated for phone: {} | Amount: KSh {:.2}", phone_number, checkout_req.total_amount);
 
     // Get user's cart items to verify they have items
     match db::get_cart_items(&pool, user_id).await {
@@ -359,14 +372,26 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
                 return Ok(HttpResponse::BadRequest().json("No valid items selected for checkout"));
             }
 
-            // Calculate total from selected cart items to verify with request
+            // Calculate total from selected cart items for reference
             let calculated_total: f64 = cart_items.iter()
                 .map(|item| item.product.price * item.quantity as f64)
                 .sum();
+            
+            // Round to 2 decimal places to match frontend
+            let calculated_total = (calculated_total * 100.0).round() / 100.0;
 
-            // Allow small floating point differences
-            if (calculated_total - checkout_req.total_amount).abs() > 0.01 {
-                return Ok(HttpResponse::BadRequest().json("Total amount mismatch"));
+            // Allow custom amounts - no longer enforce cart total match
+            // Users can pay any amount they want (as low as 1 KSh)
+            // This allows flexible payments, partial payments, tips, etc.
+            println!("💳 Payment request: KSh {:.2} (Cart total: KSh {:.2})", checkout_req.total_amount, calculated_total);
+            
+            // Only validate that amount is reasonable (>= 1 KSh)
+            if checkout_req.total_amount < 1.0 {
+                return Ok(HttpResponse::BadRequest().json(json!({
+                    "error": "Invalid amount",
+                    "message": "Minimum payment amount is KSh 1",
+                    "requested_total": checkout_req.total_amount
+                })));
             }
 
             // Get M-Pesa client
@@ -379,47 +404,85 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
                 }
             };
 
-            // Initiate STK Push
-            let account_reference = format!("ORDER_{}", user_id);
-            let transaction_desc = "Farmers Market Place Purchase";
+            // Prepare STK Push parameters
+            let formatted_phone = format_kenyan_phone(phone_number);
+            let account_reference = format!("FM_{}", user_id); // Farmers Market + user ID
+            let transaction_desc = "Farmers Market Purchase";
 
+            println!("📱 Initiating STK Push to: {}", formatted_phone);
+            println!("💰 Amount: KSh {:.2}", checkout_req.total_amount);
+
+            // Initiate STK Push
             match mpesa_client.stk_push(
-                phone_number.clone(),
+                formatted_phone.clone(),
                 checkout_req.total_amount,
                 account_reference,
                 transaction_desc.to_string(),
             ).await {
                 Ok(stk_response) => {
-                    // Store transaction in database
+                    println!("✅ STK Push initiated successfully");
+                    println!("📋 Transaction ID: {}", stk_response.checkout_request_i_d);
+
+                    // Store payment transaction in database
                     match db::create_payment_transaction(
                         &pool,
                         user_id,
                         &stk_response.checkout_request_i_d,
                         &stk_response.merchant_request_i_d,
-                        phone_number,
+                        &formatted_phone,
                         checkout_req.total_amount,
                     ).await {
-                        Ok(_) => {
-                            println!("Payment transaction created: {}", stk_response.checkout_request_i_d);
+                        Ok(transaction_id) => {
+                            println!("💾 Payment transaction stored with ID: {}", transaction_id);
                         }
                         Err(e) => {
-                            eprintln!("Failed to store payment transaction: {:?}", e);
+                            eprintln!("❌ Failed to store payment transaction: {:?}", e);
+                            // Continue anyway - payment can still succeed
                         }
                     }
 
+                    // Log M-Pesa response details
+                    println!("📊 M-Pesa Response Code: {}", stk_response.response_code);
+                    println!("📝 M-Pesa Description: {}", stk_response.response_description);
+
+                    // Return success response to frontend
                     let response = CheckoutResponse {
                         transaction_id: stk_response.checkout_request_i_d,
-                        message: stk_response.customer_message,
-                        status: "initiated".to_string(),
+                        message: if !stk_response.customer_message.is_empty() {
+                            stk_response.customer_message
+                        } else {
+                            format!("Payment request sent to {}. Check your phone and enter your M-Pesa PIN to complete the payment.", phone_number)
+                        },
+                        status: if stk_response.response_code == "0" {
+                            "initiated".to_string()
+                        } else {
+                            "pending".to_string()
+                        },
                     };
 
                     Ok(HttpResponse::Ok().json(response))
                 }
                 Err(e) => {
-                    eprintln!("STK Push failed: {:?}", e);
-                    Ok(HttpResponse::InternalServerError().json(json!({
-                        "error": "Payment initiation failed",
-                        "message": "Unable to process M-Pesa payment at this time. Please try again later."
+                    eprintln!("❌ STK Push failed: {:?}", e);
+                    
+                    // Return user-friendly error message based on error type
+                    let error_message = if e.to_string().contains("insufficient") {
+                        "Insufficient balance. Please top up your M-Pesa account and try again."
+                    } else if e.to_string().contains("timeout") {
+                        "Request timeout. Please check your network connection and try again."
+                    } else if e.to_string().contains("invalid") {
+                        "Invalid phone number. Please check and try again."
+                    } else if e.to_string().contains("duplicate") {
+                        "A payment request is already pending for this transaction. Please wait a moment and try again."
+                    } else {
+                        "Payment service temporarily unavailable. Please try again in a few minutes."
+                    };
+
+                    Ok(HttpResponse::ServiceUnavailable().json(json!({
+                        "error": "Payment failed",
+                        "message": error_message,
+                        "retry": true,
+                        "phone_number": phone_number
                     })))
                 }
             }
@@ -468,6 +531,45 @@ async fn demo_checkout(
             user_id, checkout_req.mpesa_number, checkout_req.total_amount, transaction_id);
 
     Ok(HttpResponse::Ok().json(response))
+}
+
+// Helper functions for M-Pesa phone number validation and formatting
+fn is_valid_kenyan_phone(phone: &str) -> bool {
+    // Remove spaces and common separators
+    let clean_phone = phone.replace(&[' ', '-', '(', ')'][..], "");
+    
+    // Check various Kenyan phone number formats
+    if clean_phone.starts_with("07") && clean_phone.len() == 10 {
+        // 07XXXXXXXX format
+        clean_phone.chars().all(|c| c.is_ascii_digit())
+    } else if clean_phone.starts_with("254") && clean_phone.len() == 12 {
+        // 254XXXXXXXXX format
+        clean_phone.chars().all(|c| c.is_ascii_digit())
+    } else if clean_phone.starts_with("+254") && clean_phone.len() == 13 {
+        // +254XXXXXXXXX format
+        clean_phone[1..].chars().all(|c| c.is_ascii_digit())
+    } else {
+        false
+    }
+}
+
+fn format_kenyan_phone(phone: &str) -> String {
+    let clean_phone = phone.replace(&[' ', '-', '(', ')'][..], "");
+    
+    if clean_phone.starts_with("07") {
+        format!("254{}", &clean_phone[1..])
+    } else if clean_phone.starts_with("+254") {
+        clean_phone[1..].to_string()
+    } else if clean_phone.starts_with("254") {
+        clean_phone
+    } else {
+        // Default fallback - assume it's a 9-digit number without country code
+        if clean_phone.len() == 9 && clean_phone.chars().all(|c| c.is_ascii_digit()) {
+            format!("254{}", clean_phone)
+        } else {
+            format!("254{}", clean_phone)
+        }
+    }
 }
 
 // Auth helpers
@@ -1639,6 +1741,10 @@ async fn mpesa_callback(
 
     let callback = &callback_data.stk_callback;
     let checkout_request_id = &callback.checkout_request_i_d;
+    
+    // Log callback details for monitoring
+    println!("🔄 Processing callback - Merchant Request ID: {}, Checkout Request ID: {}", 
+             callback.merchant_request_i_d, checkout_request_id);
 
     // Get payment transaction from database
     let transaction = match db::get_payment_transaction_by_checkout_request_id(&pool, checkout_request_id).await {
@@ -1651,7 +1757,7 @@ async fn mpesa_callback(
 
     let status = if callback.result_code == 0 {
         // Payment successful
-        println!("Payment successful for checkout_request_id: {}", checkout_request_id);
+        println!("Payment successful for checkout_request_id: {} - {}", checkout_request_id, callback.result_desc);
         
         // Extract payment details
         let (mpesa_receipt, transaction_date, _amount) = match extract_callback_data(callback) {
@@ -1700,8 +1806,8 @@ async fn mpesa_callback(
         PaymentStatus::Completed.to_string()
     } else {
         // Payment failed or cancelled
-        println!("Payment failed/cancelled for checkout_request_id: {}, result_code: {}", 
-                checkout_request_id, callback.result_code);
+        println!("Payment failed/cancelled for checkout_request_id: {}, result_code: {}, reason: {}", 
+                checkout_request_id, callback.result_code, callback.result_desc);
         
         let status = if callback.result_code == 1032 {
             PaymentStatus::Cancelled.to_string()

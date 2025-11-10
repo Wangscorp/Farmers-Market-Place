@@ -36,15 +36,18 @@ const Auth = () => {
    */
   const handleLogin = async () => {
     try {
+      console.log("[Auth] Attempting login with username:", username);
       const response = await axios.post("/login", {
         username,
         password,
       });
+      console.log("[Auth] Login response:", response.data);
       // Update global user state with returned user data
       login(response.data);
       alert("Login successful");
       navigate("/");
     } catch (error) {
+      console.error("[Auth] Login failed:", error);
       alert("Login failed: " + error.response?.data);
     }
   };

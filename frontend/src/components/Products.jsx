@@ -43,7 +43,7 @@ const Products = () => {
     ],
   };
 
-const getCategoryFromProduct = (product) => {
+  const getCategoryFromProduct = (product) => {
     const productCategory = product.category?.toLowerCase() || "";
     for (const [category, keywords] of Object.entries(categoryMapping)) {
       if (keywords.some((keyword) => productCategory.includes(keyword))) {
@@ -84,29 +84,34 @@ const getCategoryFromProduct = (product) => {
   const handleQuantityChange = (productId, value) => {
     const quantity = parseInt(value, 10);
     if (isNaN(quantity) || quantity < 1) {
-      setQuantities(prev => ({ ...prev, [productId]: 1 }));
+      setQuantities((prev) => ({ ...prev, [productId]: 1 }));
     } else {
-      setQuantities(prev => ({ ...prev, [productId]: quantity }));
+      setQuantities((prev) => ({ ...prev, [productId]: quantity }));
     }
   };
 
   const incrementQuantity = (productId, maxQuantity) => {
-    setQuantities(prev => ({
+    setQuantities((prev) => ({
       ...prev,
-      [productId]: Math.min((prev[productId] || 1) + 1, maxQuantity)
+      [productId]: Math.min((prev[productId] || 1) + 1, maxQuantity),
     }));
   };
 
   const decrementQuantity = (productId) => {
-    setQuantities(prev => ({
+    setQuantities((prev) => ({
       ...prev,
-      [productId]: Math.max((prev[productId] || 1) - 1, 1)
+      [productId]: Math.max((prev[productId] || 1) - 1, 1),
     }));
   };
 
   const handleAddToCart = async (product) => {
     if (!user) {
-      alert("Please log in to add items to cart");
+      const shouldRedirect = window.confirm(
+        "Please log in to add items to cart. Would you like to go to the login page?"
+      );
+      if (shouldRedirect) {
+        navigate("/auth");
+      }
       return;
     }
 
@@ -114,16 +119,28 @@ const getCategoryFromProduct = (product) => {
 
     try {
       await addToCart(product, quantity);
-      alert(`${quantity} item${quantity > 1 ? 's' : ''} added to cart!`);
+      // Immediately redirect to cart for checkout/payment
+      navigate("/cart");
     } catch (error) {
       console.error("Error adding to cart:", error);
-      // Show specific error message if available, otherwise generic message
-      const errorMessage = error.message || "Failed to add item to cart";
-      alert(errorMessage);
+      // Handle 401 authentication errors
+      if (
+        error.message.includes("Authentication failed") ||
+        error.message.includes("log in")
+      ) {
+        const shouldRedirect = window.confirm(
+          "Your session has expired. Would you like to log in again?"
+        );
+        if (shouldRedirect) {
+          navigate("/auth");
+        }
+      } else {
+        // Show specific error message if available, otherwise generic message
+        const errorMessage = error.message || "Failed to add item to cart";
+        alert(errorMessage);
+      }
     }
   };
-
-
 
   return (
     <div>
@@ -179,25 +196,47 @@ const getCategoryFromProduct = (product) => {
                       min="1"
                       max={product.quantity}
                       value={quantities[product.id] || 1}
-                      onChange={(e) => handleQuantityChange(product.id, e.target.value)}
+                      onChange={(e) =>
+                        handleQuantityChange(product.id, e.target.value)
+                      }
                       className="quantity-input"
                     />
                     <button
                       type="button"
-                      onClick={() => incrementQuantity(product.id, product.quantity)}
+                      onClick={() =>
+                        incrementQuantity(product.id, product.quantity)
+                      }
                       className="quantity-btn quantity-btn-increment"
-                      disabled={(quantities[product.id] || 1) >= product.quantity}
+                      disabled={
+                        (quantities[product.id] || 1) >= product.quantity
+                      }
                     >
                       +
                     </button>
                   </div>
-                  <button onClick={() => handleAddToCart(product)} className="add-to-cart-btn">
+                  <button
+                    onClick={() => handleAddToCart(product)}
+                    className="add-to-cart-btn"
+                  >
                     Add to Cart
                   </button>
                 </div>
               ) : (
                 <div className="login-required-message">
-                  <p>Please <a href="/auth" style={{color: '#27ae60', textDecoration: 'none', fontWeight: 'bold'}}>log in</a> to purchase items</p>
+                  <p>
+                    Please{" "}
+                    <a
+                      href="/auth"
+                      style={{
+                        color: "#27ae60",
+                        textDecoration: "none",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      log in
+                    </a>{" "}
+                    to purchase items
+                  </p>
                 </div>
               )}
               {user && user.role !== "Vendor" && (
@@ -210,10 +249,7 @@ const getCategoryFromProduct = (product) => {
                   View Seller Profile
                 </button>
               )}
-
             </div>
-
-
           </div>
         ))}
       </div>

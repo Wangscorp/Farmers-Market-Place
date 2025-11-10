@@ -256,10 +256,7 @@ pub struct PaymentTransaction {
     pub updated_at: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct MpesaCallbackRequest {
-    pub body: serde_json::Value,
-}
+
 
 pub fn create_jwt(user: &User) -> Result<String, Error> {
     let claims = Claims::new(user);

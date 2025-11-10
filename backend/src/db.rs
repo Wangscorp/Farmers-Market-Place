@@ -697,6 +697,7 @@ pub async fn add_to_cart(pool: &PgPool, user_id: i32, product_id: i32, quantity:
                 (SELECT category FROM products WHERE id = $2) as p_category,
                 (SELECT description FROM products WHERE id = $2) as p_description,
                 (SELECT image FROM products WHERE id = $2) as p_image,
+                (SELECT quantity FROM products WHERE id = $2) as p_quantity,
                 (SELECT vendor_id FROM products WHERE id = $2) as p_vendor_id
             "#,
         )
@@ -713,7 +714,7 @@ pub async fn add_to_cart(pool: &PgPool, user_id: i32, product_id: i32, quantity:
             category: row.try_get("p_category")?,
             description: row.try_get::<Option<String>, _>("p_description")?,
             image: row.try_get::<Option<String>, _>("p_image")?,
-            quantity: 0, // Default for new cart items
+            quantity: row.try_get("p_quantity")?,
             vendor_id: row.try_get::<i32, _>("p_vendor_id")? as u32,
         };
 

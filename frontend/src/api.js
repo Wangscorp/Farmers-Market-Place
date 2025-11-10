@@ -22,15 +22,45 @@ axios.interceptors.request.use(
       console.log(
         `[API] Adding auth token for ${config.method?.toUpperCase()} ${
           config.url
-        }`
+        }`,
+        { tokenPrefix: token.substring(0, 20) + "..." }
       );
     } else {
-      console.warn("No token found in localStorage for request to", config.url);
+      console.warn(
+        `[API] No token found in localStorage for request to ${config.url}`
+      );
     }
     return config;
   },
   (error) => {
-    console.error("Request interceptor error:", error);
+    console.error("[API] Request interceptor error:", error);
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor to handle responses and errors
+axios.interceptors.response.use(
+  (response) => {
+    console.log(
+      `[API] Response received for ${response.config.method?.toUpperCase()} ${
+        response.config.url
+      }`,
+      {
+        status: response.status,
+      }
+    );
+    return response;
+  },
+  (error) => {
+    console.error(
+      `[API] Response error for ${error.config?.method?.toUpperCase()} ${
+        error.config?.url
+      }`,
+      {
+        status: error.response?.status,
+        data: error.response?.data,
+      }
+    );
     return Promise.reject(error);
   }
 );

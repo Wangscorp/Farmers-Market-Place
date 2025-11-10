@@ -12,6 +12,8 @@ import AdminDashboard from "./components/AdminDashboard";
 import Shipping from "./components/Shipping";
 import Conversations from "./components/Conversations";
 import Chatbot from "./components/Chatbot";
+import MpesaTest from "./components/MpesaTest";
+import AuthDebug from "./components/AuthDebug";
 import { FollowProvider } from "./components/FollowContext";
 import { useUser } from "./hooks/useUser";
 import "./App.css";
@@ -43,6 +45,8 @@ function App() {
               element={<VendorProfileView />}
             />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/mpesa-test" element={<MpesaTest />} />
+            <Route path="/auth-debug" element={<AuthDebug />} />
           </Routes>
         </main>
         <Chatbot />

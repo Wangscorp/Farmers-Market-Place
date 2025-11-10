@@ -9,7 +9,7 @@ const Cart = () => {
   const [selectedItems, setSelectedItems] = useState(new Set());
 
   const handleItemSelect = (itemId, isSelected) => {
-    setSelectedItems(prev => {
+    setSelectedItems((prev) => {
       const newSet = new Set(prev);
       if (isSelected) {
         newSet.add(itemId);
@@ -27,7 +27,7 @@ const Cart = () => {
     }
 
     try {
-      const removePromises = Array.from(selectedItems).map(itemId =>
+      const removePromises = Array.from(selectedItems).map((itemId) =>
         removeFromCart(itemId)
       );
       await Promise.all(removePromises);
@@ -69,7 +69,7 @@ const Cart = () => {
       return getTotalPrice();
     }
     return cartItems
-      .filter(item => selectedItems.has(item.id))
+      .filter((item) => selectedItems.has(item.id))
       .reduce((total, item) => total + item.product.price * item.quantity, 0);
   };
 
@@ -81,8 +81,12 @@ const Cart = () => {
         return;
       }
 
-      if (!mpesaNumber || !/^07\d{8}$/.test(mpesaNumber)) {
-        alert("Please enter a valid M-Pesa phone number (07XXXXXXXX)");
+      // Enhanced phone number validation for multiple formats
+      const phoneRegex = /^(07\d{8}|254\d{9}|\+254\d{9})$/;
+      if (!mpesaNumber || !phoneRegex.test(mpesaNumber.replace(/[\s-]/g, ""))) {
+        alert(
+          "Please enter a valid Kenyan M-Pesa number:\n• 07XXXXXXXX\n• 254XXXXXXXXX\n• +254XXXXXXXXX"
+        );
         return;
       }
 
@@ -91,7 +95,35 @@ const Cart = () => {
         return;
       }
 
-      const selectedItemIds = selectedItems.size > 0 ? Array.from(selectedItems) : null;
+      const selectedItemIds =
+        selectedItems.size > 0 ? Array.from(selectedItems) : null;
+
+      // Round to 2 decimal places to match backend calculation
+      const totalAmount = Math.round(getSelectedTotal() * 100) / 100;
+
+      if (totalAmount < 1) {
+        alert("Minimum payment amount is KSh 1");
+        return;
+      }
+
+      console.log("💰 Checkout details:", {
+        selectedItems: selectedItemIds,
+        totalAmount: totalAmount,
+        cartItems: cartItems.length,
+      });
+
+      // Show loading state
+      const checkoutBtn = document.querySelector(".checkout-button");
+      checkoutBtn.textContent = "Processing...";
+      checkoutBtn.disabled = true;
+
+      const requestPayload = {
+        mpesa_number: mpesaNumber.replace(/[\s-]/g, ""), // Clean phone number
+        total_amount: totalAmount,
+        selected_items: selectedItemIds,
+      };
+
+      console.log("🔄 Initiating M-Pesa payment...", requestPayload);
 
       const response = await fetch("http://localhost:8080/checkout", {
         method: "POST",
@@ -99,28 +131,49 @@ const Cart = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          mpesa_number: mpesaNumber,
-          total_amount: getSelectedTotal(),
-          selected_items: selectedItemIds,
-        }),
+        body: JSON.stringify(requestPayload),
       });
 
+      const result = await response.json();
+
       if (response.ok) {
-        const result = await response.json();
+        console.log("✅ Payment initiated:", result);
+
+        // Show success message with clear instructions
         alert(
-          `Payment initiated! Check your phone for M-Pesa prompt. Transaction ID: ${result.transaction_id}`
+          `🎉 M-Pesa Payment Initiated!\n\n` +
+            `📱 Check your phone (${mpesaNumber}) for the M-Pesa prompt\n` +
+            `💰 Amount: KSh ${totalAmount.toLocaleString()}\n` +
+            `🆔 Transaction ID: ${result.transaction_id}\n\n` +
+            `⏰ You have 60 seconds to complete the payment`
         );
-        // Clear cart after successful payment initiation
+
+        // Clear form after successful initiation
         setMpesaNumber("");
-        window.location.reload(); // Simple way to refresh and clear cart
+
+        // Refresh cart after a delay to allow for callback processing
+        setTimeout(() => {
+          window.location.reload();
+        }, 2000);
       } else {
-        const errorData = await response.json();
-        alert(`Payment failed: ${errorData.message || "Unknown error"}`);
+        console.error("❌ Payment failed:", result);
+
+        // Show specific error message from backend
+        const errorMsg = result.message || result.error || "Payment failed";
+        alert(`❌ Payment Failed\n\n${errorMsg}\n\nPlease try again.`);
       }
     } catch (error) {
       console.error("Checkout error:", error);
-      alert("Failed to process payment. Please try again.");
+      alert(
+        "❌ Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
+      );
+    } finally {
+      // Reset button state
+      const checkoutBtn = document.querySelector(".checkout-button");
+      if (checkoutBtn) {
+        checkoutBtn.textContent = "Pay with M-Pesa";
+        checkoutBtn.disabled = false;
+      }
     }
   };
 
@@ -216,9 +269,10 @@ const Cart = () => {
           <div className="cart-total">
             <h3>
               Total: KSh {getSelectedTotal().toLocaleString()}
-              {selectedItems.size > 0 && selectedItems.size < cartItems.length && (
-                <small> (selected items only)</small>
-              )}
+              {selectedItems.size > 0 &&
+                selectedItems.size < cartItems.length && (
+                  <small> (selected items only)</small>
+                )}
             </h3>
           </div>
         </div>
@@ -230,14 +284,21 @@ const Cart = () => {
           <input
             id="mpesa-number"
             type="tel"
-            placeholder="07XXXXXXXX"
+            placeholder="07XXXXXXXX or 254XXXXXXXXX"
             value={mpesaNumber}
             onChange={(e) => setMpesaNumber(e.target.value)}
-            pattern="^07\d{8}$"
-            title="Please enter a valid Kenyan phone number starting with 07 (10 digits total)"
+            pattern="^(07\d{8}|254\d{9}|\+254\d{9})$"
+            title="Please enter a valid Kenyan M-Pesa number"
             required
           />
-          <small>Format: 07XXXXXXXX (10 digits)</small>
+          <small>
+            Supported formats:
+            <br />
+            • 07XXXXXXXX
+            <br />
+            • 254XXXXXXXXX
+            <br />• +254XXXXXXXXX
+          </small>
         </div>
       </div>
       <button
@@ -245,11 +306,14 @@ const Cart = () => {
         disabled={
           cartItems.length === 0 ||
           !mpesaNumber ||
-          !/^07\d{8}$/.test(mpesaNumber)
+          !/^(07\d{8}|254\d{9}|\+254\d{9})$/.test(
+            mpesaNumber.replace(/[\s-]/g, "")
+          ) ||
+          getSelectedTotal() < 1
         }
         onClick={() => handleCheckout()}
       >
-        Pay with M-Pesa
+        Pay with M-Pesa (KSh {getSelectedTotal().toLocaleString()})
       </button>
     </div>
   );

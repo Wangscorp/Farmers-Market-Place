@@ -37,6 +37,14 @@ export const CartProvider = ({ children }) => {
 
   const addToCart = async (product, quantity = 1) => {
     try {
+      const token = localStorage.getItem("token");
+
+      console.log("[CartContext] Adding to cart:", {
+        productId: product.id,
+        quantity,
+        hasToken: !!token,
+      });
+
       // Ensure product_id is a number
       const productId = parseInt(product.id, 10);
       if (isNaN(productId)) {
@@ -56,7 +64,9 @@ export const CartProvider = ({ children }) => {
         // Check quantity limit
         if (existingItem.quantity + quantity > product.quantity) {
           throw new Error(
-            `Cannot add ${quantity} more items. Only ${product.quantity - existingItem.quantity} available.`
+            `Cannot add ${quantity} more items. Only ${
+              product.quantity - existingItem.quantity
+            } available.`
           );
         }
       } else {
@@ -72,20 +82,45 @@ export const CartProvider = ({ children }) => {
         }
       }
 
+      console.log("[CartContext] Sending POST /cart request...");
       const response = await axios.post("/cart", {
         product_id: productId,
         quantity: quantity,
       });
+      console.log("[CartContext] Cart response received:", response.data);
 
-      // Update cartItems with the new item
+      // Update cartItems properly - check if item exists and update, or add new
       setCartItems((prev) => {
-        const updated = [...prev, response.data];
-        return updated;
+        const existingItemIndex = prev.findIndex(
+          (item) => item.product_id === productId
+        );
+
+        if (existingItemIndex >= 0) {
+          // Update existing item
+          const updated = [...prev];
+          updated[existingItemIndex] = response.data;
+          return updated;
+        } else {
+          // Add new item
+          return [...prev, response.data];
+        }
       });
 
       return response.data;
     } catch (error) {
-      console.error("Error adding to cart:", error);
+      console.error("[CartContext] Error adding to cart:", error);
+      if (error.response) {
+        console.error("[CartContext] Error response:", {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers,
+        });
+        // Throw a more specific error message
+        if (error.response.status === 401) {
+          throw new Error("Authentication failed. Please log in again.");
+        }
+        throw new Error(error.response.data || "Failed to add item to cart");
+      }
       throw error;
     }
   };
