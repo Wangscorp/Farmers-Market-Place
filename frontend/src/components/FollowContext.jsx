@@ -1,13 +1,13 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from '../api';
-import { useUser } from '../hooks/useUser';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import axios from "../api";
+import { useUser } from "../hooks/useUser";
 
 const FollowContext = createContext();
 
 export const useFollow = () => {
   const context = useContext(FollowContext);
   if (!context) {
-    throw new Error('useFollow must be used within a FollowProvider');
+    throw new Error("useFollow must be used within a FollowProvider");
   }
   return context;
 };
@@ -31,10 +31,10 @@ export const FollowProvider = ({ children }) => {
 
     try {
       setLoading(true);
-      const response = await axios.get('/follow');
+      const response = await axios.get("/follow");
       setFollows(response.data);
     } catch (error) {
-      console.error('Error loading follows:', error);
+      console.error("Error loading follows:", error);
     } finally {
       setLoading(false);
     }
@@ -42,20 +42,20 @@ export const FollowProvider = ({ children }) => {
 
   const followVendor = async (vendorId) => {
     if (!user) {
-      alert('Please log in to follow vendors');
+      alert("Please log in to follow vendors");
       return false;
     }
 
     try {
-      const response = await axios.post('/follow', { vendor_id: vendorId });
-      setFollows(prev => [...prev, response.data]);
+      const response = await axios.post("/follow", { vendor_id: vendorId });
+      setFollows((prev) => [...prev, response.data]);
       return true;
     } catch (error) {
       if (error.response?.status === 409) {
-        alert('You are already following this vendor');
+        alert("You are already following this vendor");
       } else {
-        console.error('Error following vendor:', error);
-        alert('Failed to follow vendor');
+        console.error("Error following vendor:", error);
+        alert("Failed to follow vendor");
       }
       return false;
     }
@@ -66,21 +66,23 @@ export const FollowProvider = ({ children }) => {
 
     try {
       await axios.delete(`/follow/${vendorId}`);
-      setFollows(prev => prev.filter(follow => follow.vendor_id !== vendorId));
+      setFollows((prev) =>
+        prev.filter((follow) => follow.vendor_id !== vendorId)
+      );
       return true;
     } catch (error) {
-      console.error('Error unfollowing vendor:', error);
-      alert('Failed to unfollow vendor');
+      console.error("Error unfollowing vendor:", error);
+      alert("Failed to unfollow vendor");
       return false;
     }
   };
 
   const isFollowing = (vendorId) => {
-    return follows.some(follow => follow.vendor_id === vendorId);
+    return follows.some((follow) => follow.vendor_id === vendorId);
   };
 
   const getFollowedVendorIds = () => {
-    return follows.map(follow => follow.vendor_id);
+    return follows.map((follow) => follow.vendor_id);
   };
 
   const value = {
@@ -90,12 +92,10 @@ export const FollowProvider = ({ children }) => {
     unfollowVendor,
     isFollowing,
     getFollowedVendorIds,
-    loadFollows
+    loadFollows,
   };
 
   return (
-    <FollowContext.Provider value={value}>
-      {children}
-    </FollowContext.Provider>
+    <FollowContext.Provider value={value}>{children}</FollowContext.Provider>
   );
 };
