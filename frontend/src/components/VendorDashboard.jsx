@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import axios from "../api";
 import ImageUploadWithResize from "./ImageUploadWithResize";
 import VerificationUpload from "./VerificationUpload";
@@ -58,7 +59,7 @@ const VendorDashboard = () => {
 
     // Check if image is required for new products
     if (!editingProduct && !resizedImage) {
-      alert("Please upload a product image before submitting.");
+      toast.error("Please upload a product image before submitting.");
       return;
     }
 
@@ -73,7 +74,7 @@ const VendorDashboard = () => {
           quantity: parseInt(quantity),
           image: resizedImage,
         });
-        alert("Product updated successfully!");
+        toast.success("Product updated successfully!");
       } else {
         // Create new product
         await axios.post("/products", {
@@ -84,7 +85,7 @@ const VendorDashboard = () => {
           quantity: parseInt(quantity),
           image: resizedImage,
         });
-        alert("Product created successfully!");
+        toast.success("Product created successfully!");
       }
 
       // Reset form
@@ -120,7 +121,7 @@ const VendorDashboard = () => {
         errorMessage = "An unexpected error occurred: " + error.message;
       }
 
-      alert(errorMessage);
+      toast.success(errorMessage);
     }
   };
 
@@ -153,10 +154,10 @@ const VendorDashboard = () => {
 
     try {
       await axios.delete(`/products/${productId}`);
-      alert("Product deleted successfully!");
+      toast.success("Product deleted successfully!");
       fetchProducts();
     } catch (error) {
-      alert(
+      toast.success(
         "Error deleting product: " + (error.response?.data || error.message)
       );
     }
@@ -164,17 +165,17 @@ const VendorDashboard = () => {
 
   const handleUpdatePhoneNumber = async () => {
     if (!user) {
-      alert("You must be logged in to update your phone number");
+      toast.error("You must be logged in to update your phone number");
       return;
     }
 
     if (!mpesaNumber.trim()) {
-      alert("Please enter your M-Pesa number for payment processing");
+      toast.error("Please enter your M-Pesa number for payment processing");
       return;
     }
 
     if (!/^(07\d{8}|011\d{7,8}|\+254\d{9})$/.test(mpesaNumber)) {
-      alert(
+      toast.success(
         "Please enter a valid M-Pesa number (07XXXXXXXX, 011XXXXXXXX, or +254XXXXXXXXX)"
       );
       return;
@@ -186,7 +187,7 @@ const VendorDashboard = () => {
         email: user.email,
         mpesa_number: mpesaNumber,
       });
-      alert("Phone number updated successfully!");
+      toast.success("Phone number updated successfully!");
       setShowPhoneForm(false);
     } catch (error) {
       console.error("Error updating phone number:", error);
@@ -196,7 +197,7 @@ const VendorDashboard = () => {
           ? "Network error - please check your connection"
           : error.message) ||
         "Unknown error occurred";
-      alert("Failed to update phone number: " + errorMessage);
+      toast.error("Failed to update phone number: " + errorMessage);
     }
   };
 

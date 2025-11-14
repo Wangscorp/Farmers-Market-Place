@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { toast } from "react-toastify";
 import axios from '../api';
 import { useUser } from '../hooks/useUser';
 import './Shipping.css';
@@ -57,24 +58,24 @@ const Shipping = () => {
         comment: reviewForm.comment.trim() || null
       });
 
-      alert('Review submitted successfully!');
+      toast.success('Review submitted successfully!');
       setSelectedOrder(null);
       setReviewForm({ rating: 5, comment: '' });
       loadReviews();
     } catch (error) {
       console.error('Error submitting review:', error);
-      alert('Failed to submit review. Please try again.');
+      toast.success('Failed to submit review. Please try again.');
     }
   };
 
   const handleReportSubmit = async (order) => {
     if (!user) {
-      alert("Please login to submit a report");
+      toast.error("Please login to submit a report");
       return;
     }
 
     if (!reportDescription.trim()) {
-      alert("Please provide a description for the report");
+      toast.error("Please provide a description for the report");
       return;
     }
 
@@ -86,12 +87,12 @@ const Shipping = () => {
         description: reportDescription.trim(),
       });
 
-      alert("Report submitted successfully. Admin will review it shortly.");
+      toast.success("Report submitted successfully. Admin will review it shortly.");
       setShowReportForm(null);
       setReportType("non_delivery");
       setReportDescription("");
     } catch (error) {
-      alert("Failed to submit report. Please try again.");
+      toast.error("Failed to submit report. Please try again.");
       console.error("Report submission error:", error);
     }
   };

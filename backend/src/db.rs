@@ -4,7 +4,8 @@ use bcrypt::{hash, verify, DEFAULT_COST};
 
 pub async fn init_db() -> PgPool {
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "postgresql://wangs@localhost/farmers_market".to_string());
+        .unwrap_or_else(|_| "sqlite:farmers_market.db".to_string());
+    println!("Connecting to database: {}", database_url);
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -15,16 +16,16 @@ pub async fn init_db() -> PgPool {
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username VARCHAR(255) UNIQUE NOT NULL,
-            email VARCHAR(255) UNIQUE NOT NULL,
-            password_hash VARCHAR(255) NOT NULL,
-            role VARCHAR(50) NOT NULL DEFAULT 'Customer',
+            id INTEGER PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'Customer',
             profile_image TEXT,
             verified BOOLEAN NOT NULL DEFAULT FALSE,
             banned BOOLEAN NOT NULL DEFAULT FALSE,
             verification_document TEXT,
-            verification_submitted_at TIMESTAMP WITH TIME ZONE
+            verification_submitted_at TEXT
         )
         "#,
     )

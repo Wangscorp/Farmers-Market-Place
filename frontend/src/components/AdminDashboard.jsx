@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useUser } from "../hooks/useUser";
 import { useNavigate } from "react-router-dom";
 import axios from "../api";
@@ -94,10 +95,10 @@ const AdminDashboard = () => {
       await axios.patch(`/api/admin/users/${userId}/verify`, {
         verified: approved,
       });
-      alert(approved ? "Vendor verified successfully!" : "Vendor rejected.");
+      toast.success(approved ? "Vendor verified successfully!" : "Vendor rejected.");
       fetchPendingVendors();
     } catch (err) {
-      alert(
+      toast.success(
         "Failed to update vendor status: " + (err.response?.data || err.message)
       );
     }
@@ -217,12 +218,12 @@ const AdminDashboard = () => {
       const response = await axios.patch(
         `/api/admin/users/${userId}/reset-password`
       );
-      alert(
+      toast.success(
         response.data.message ||
           "Password reset successfully. User has been emailed their new password."
       );
     } catch (err) {
-      alert("Failed to reset password: " + (err.response?.data || err.message));
+      toast.error("Failed to reset password: " + (err.response?.data || err.message));
     }
   };
 

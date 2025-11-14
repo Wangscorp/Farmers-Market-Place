@@ -579,7 +579,12 @@ fn extract_auth(req: &actix_web::HttpRequest) -> Result<Claims, HttpResponse> {
         return Err(HttpResponse::Unauthorized().json("Authorization header missing"));
     }
 
-    let auth_str = auth_header.unwrap().to_str().unwrap_or("");
+    let auth_header_value = auth_header.unwrap();
+    let auth_str = match auth_header_value.to_str() {
+        Ok(s) => s,
+        Err(_) => return Err(HttpResponse::BadRequest().json("Invalid authorization header encoding")),
+    };
+
     if !auth_str.starts_with("Bearer ") {
         return Err(HttpResponse::Unauthorized().json("Invalid authorization format"));
     }

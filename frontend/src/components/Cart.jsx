@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "react-toastify";
 import { useCart } from "./CartContext";
 import "./Cart.css";
 
@@ -22,7 +23,7 @@ const Cart = () => {
 
   const handleRemoveSelected = async () => {
     if (selectedItems.size === 0) {
-      alert("Please select items to remove");
+      toast.error("Please select items to remove");
       return;
     }
 
@@ -32,18 +33,18 @@ const Cart = () => {
       );
       await Promise.all(removePromises);
       setSelectedItems(new Set());
-      alert(`${selectedItems.size} item(s) removed from cart`);
+      toast.success(`${selectedItems.size} item(s) removed from cart`);
     } catch {
-      alert("Failed to remove some items from cart");
+      toast.error("Failed to remove some items from cart");
     }
   };
 
   const handleRemoveFromCart = async (itemId) => {
     try {
       await removeFromCart(itemId);
-      alert("Item removed from cart");
+      toast.success("Item removed from cart");
     } catch {
-      alert("Failed to remove item from cart");
+      toast.error("Failed to remove item from cart");
     }
   };
 
@@ -60,7 +61,7 @@ const Cart = () => {
         error.response?.data?.message ||
         error.message ||
         "Failed to update quantity";
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -77,21 +78,21 @@ const Cart = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Please log in to checkout");
+        toast.error("Please log in to checkout");
         return;
       }
 
       // Enhanced phone number validation for multiple formats
       const phoneRegex = /^(07\d{8}|254\d{9}|\+254\d{9})$/;
       if (!mpesaNumber || !phoneRegex.test(mpesaNumber.replace(/[\s-]/g, ""))) {
-        alert(
+        toast.error(
           "Please enter a valid Kenyan M-Pesa number:\n• 07XXXXXXXX\n• 254XXXXXXXXX\n• +254XXXXXXXXX"
         );
         return;
       }
 
       if (cartItems.length === 0) {
-        alert("Your cart is empty");
+        toast.success("Your cart is empty");
         return;
       }
 
@@ -102,7 +103,7 @@ const Cart = () => {
       const totalAmount = Math.round(getSelectedTotal() * 100) / 100;
 
       if (totalAmount < 1) {
-        alert("Minimum payment amount is KSh 1");
+        toast.error("Minimum payment amount is KSh 1");
         return;
       }
 
@@ -140,7 +141,7 @@ const Cart = () => {
         console.log("✅ Payment initiated:", result);
 
         // Show success message with clear instructions
-        alert(
+        toast.success(
           `🎉 M-Pesa Payment Initiated!\n\n` +
             `📱 Check your phone (${mpesaNumber}) for the M-Pesa prompt\n` +
             `💰 Amount: KSh ${totalAmount.toLocaleString()}\n` +
@@ -160,11 +161,11 @@ const Cart = () => {
 
         // Show specific error message from backend
         const errorMsg = result.message || result.error || "Payment failed";
-        alert(`❌ Payment Failed\n\n${errorMsg}\n\nPlease try again.`);
+        toast.error(`❌ Payment Failed\n\n${errorMsg}\n\nPlease try again.`);
       }
     } catch (error) {
       console.error("Checkout error:", error);
-      alert(
+      toast.error(
         "❌ Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
       );
     } finally {

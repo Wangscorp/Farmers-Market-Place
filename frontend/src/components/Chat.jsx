@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from "react-toastify";
 import axios from '../api';
 import { useUser } from '../hooks/useUser';
 import './Chat.css';
@@ -14,13 +15,13 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
     if (otherUserId) {
       loadMessages();
     }
-  }, [otherUserId]);
+  }, [otherUserId, loadMessages]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const loadMessages = async () => {
+  const loadMessages = useCallback(async () => {
     if (!otherUserId) return;
 
     try {
@@ -35,7 +36,7 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [otherUserId]);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -52,7 +53,7 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
       setNewMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
-      alert('Failed to send message');
+      toast.error('Failed to send message');
     }
   };
 

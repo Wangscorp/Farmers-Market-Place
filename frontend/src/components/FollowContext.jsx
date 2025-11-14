@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { toast } from "react-toastify";
 import axios from "../api";
 import { useUser } from "../hooks/useUser";
 
@@ -17,16 +18,7 @@ export const FollowProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const { user } = useUser();
 
-  // Load user's follows when user changes
-  useEffect(() => {
-    if (user) {
-      loadFollows();
-    } else {
-      setFollows([]);
-    }
-  }, [user]);
-
-  const loadFollows = async () => {
+  const loadFollows = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -38,11 +30,20 @@ export const FollowProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  // Load user's follows when user changes
+  useEffect(() => {
+    if (user) {
+      loadFollows();
+    } else {
+      setFollows([]);
+    }
+  }, [user, loadFollows]);
 
   const followVendor = async (vendorId) => {
     if (!user) {
-      alert("Please log in to follow vendors");
+      toast.error("Please log in to follow vendors");
       return false;
     }
 
@@ -52,10 +53,10 @@ export const FollowProvider = ({ children }) => {
       return true;
     } catch (error) {
       if (error.response?.status === 409) {
-        alert("You are already following this vendor");
+        toast.warning("You are already following this vendor");
       } else {
         console.error("Error following vendor:", error);
-        alert("Failed to follow vendor");
+        toast.error("Failed to follow vendor");
       }
       return false;
     }
@@ -72,7 +73,7 @@ export const FollowProvider = ({ children }) => {
       return true;
     } catch (error) {
       console.error("Error unfollowing vendor:", error);
-      alert("Failed to unfollow vendor");
+      toast.error("Failed to unfollow vendor");
       return false;
     }
   };

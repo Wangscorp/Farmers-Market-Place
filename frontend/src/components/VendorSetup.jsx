@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import axios from "../api";
 import { useUser } from "../hooks/useUser";
@@ -26,19 +27,19 @@ const VendorSetup = () => {
   const handleComplete = async () => {
     // Validate M-Pesa number
     if (!mpesaNumber.trim()) {
-      alert("Please enter your M-Pesa number for payment processing");
+      toast.error("Please enter your M-Pesa number for payment processing");
       return;
     }
 
     if (!/^(07\d{8}|011\d{7,8}|\+254\d{9})$/.test(mpesaNumber)) {
-      alert(
+      toast.success(
         "Please enter a valid M-Pesa number (07XXXXXXXX, 011XXXXXXXX, or +254XXXXXXXXX)"
       );
       return;
     }
 
     if (!resizedImage) {
-      alert("Please upload a profile image for verification");
+      toast.error("Please upload a profile image for verification");
       return;
     }
 
@@ -58,14 +59,14 @@ const VendorSetup = () => {
         payment_preference: paymentPreference,
       });
 
-      alert(
+      toast.success(
         "Setup complete! Your profile has been updated. Please wait for admin verification."
       );
       navigate("/vendor");
     } catch (error) {
       const errorMessage =
         error.response?.data || error.message || "Unknown error";
-      alert("Failed to complete setup: " + errorMessage);
+      toast.error("Failed to complete setup: " + errorMessage);
     } finally {
       setLoading(false);
     }

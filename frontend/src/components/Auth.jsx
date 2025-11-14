@@ -8,6 +8,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import axios from "../api"; // Configured axios instance with base URL
 import { useUser } from "../hooks/useUser"; // React context for user state management
 import ImageUploadWithResize from "./ImageUploadWithResize"; // Image compression component
@@ -44,11 +45,11 @@ const Auth = () => {
       console.log("[Auth] Login response:", response.data);
       // Update global user state with returned user data
       login(response.data);
-      alert("Login successful");
+      toast.success("Login successful!");
       navigate("/");
     } catch (error) {
       console.error("[Auth] Login failed:", error);
-      alert("Login failed: " + error.response?.data);
+      toast.error("Login failed: " + (error.response?.data || "Please try again"));
     }
   };
 
@@ -62,7 +63,7 @@ const Auth = () => {
   const handleSignup = async () => {
     // Client-side validation before API call
     if (password !== confirmPassword) {
-      alert("Passwords do not match");
+      toast.warning("Passwords do not match");
       return;
     }
 
@@ -77,7 +78,7 @@ const Auth = () => {
         profile_image: resizedImage, // Base64 encoded resized image
       });
       login(response.data);
-      alert("Signup successful");
+      toast.success("Signup successful!");
 
       // For vendors, redirect to setup page instead of home
       if (role === "Vendor") {
@@ -86,7 +87,7 @@ const Auth = () => {
         navigate("/");
       }
     } catch (error) {
-      alert("Signup failed: " + error.response?.data);
+      toast.error("Signup failed: " + (error.response?.data || "Please try again"));
     }
   };
 

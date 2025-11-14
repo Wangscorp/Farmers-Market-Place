@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import axios from "../api";
 import { useUser } from "../hooks/useUser";
 import ImageUploadWithResize from "./ImageUploadWithResize";
@@ -36,19 +37,19 @@ const VendorProfile = () => {
 
   const handleUpdateProfileImage = async () => {
     if (!user) {
-      alert("You must be logged in to update your profile image");
+      toast.error("You must be logged in to update your profile image");
       return;
     }
 
     if (!resizedImage) {
-      alert("Please select an image first");
+      toast.error("Please select an image first");
       return;
     }
     try {
       await axios.patch("/profile/image", {
         profile_image: resizedImage,
       });
-      alert(
+      toast.success(
         "Profile image updated successfully! Please wait for admin verification."
       );
       setResizedImage(null); // Reset after successful upload
@@ -56,33 +57,33 @@ const VendorProfile = () => {
       console.error("Error updating profile image:", error);
       const errorMessage =
         error.response?.data || error.message || "Unknown error";
-      alert("Failed to update profile image: " + errorMessage);
+      toast.error("Failed to update profile image: " + errorMessage);
     }
   };
 
   const handleUpdateProfile = async () => {
     if (!user) {
-      alert("You must be logged in to update your profile");
+      toast.error("You must be logged in to update your profile");
       return;
     }
 
     if (!secondaryEmail.trim() && secondaryEmail) {
-      alert("Please enter a valid secondary email");
+      toast.error("Please enter a valid secondary email");
       return;
     }
 
     if (secondaryEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(secondaryEmail)) {
-      alert("Please enter a valid secondary email format");
+      toast.error("Please enter a valid secondary email format");
       return;
     }
 
     if (!mpesaNumber.trim()) {
-      alert("Please enter your M-Pesa number for payment processing");
+      toast.error("Please enter your M-Pesa number for payment processing");
       return;
     }
 
     if (!/^(07\d{8}|011\d{7,8}|\+254\d{9})$/.test(mpesaNumber)) {
-      alert(
+      toast.success(
         "Please enter a valid M-Pesa number (07XXXXXXXX, 011XXXXXXXX, or +254XXXXXXXXX)"
       );
       return;
@@ -107,7 +108,7 @@ const VendorProfile = () => {
       console.log("[VendorProfile] Sending payload:", payload);
 
       const response = await axios.patch("/profile", payload);
-      alert(response.data.message || "Profile updated successfully");
+      toast.success(response.data.message || "Profile updated successfully");
     } catch (error) {
       console.error("[VendorProfile] Update error:", error);
       const errorMessage =
@@ -116,7 +117,7 @@ const VendorProfile = () => {
           ? "Network error - please check your connection"
           : error.message) ||
         "Unknown error occurred";
-      alert("Failed to update profile: " + errorMessage);
+      toast.error("Failed to update profile: " + errorMessage);
     }
   };
 

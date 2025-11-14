@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import axios from "../api";
 import { useCart } from "./CartContext";
@@ -137,7 +138,7 @@ const Products = () => {
       } else {
         // Show specific error message if available, otherwise generic message
         const errorMessage = error.message || "Failed to add item to cart";
-        alert(errorMessage);
+        toast.success(errorMessage);
       }
     }
   };

@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 import { useUser } from "../hooks/useUser";
 import { useState } from "react";
 import "./Header.css";
@@ -9,7 +10,7 @@ const Header = () => {
 
   const handleLogout = () => {
     logout();
-    alert("Logged out successfully");
+    toast.success("Logged out successfully");
     setMenuOpen(false);
   };
 

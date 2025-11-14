@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { toast } from "react-toastify";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "../api";
 import { useUser } from "../hooks/useUser";
@@ -38,7 +39,7 @@ const VendorProfileView = () => {
 
   const handleFollowToggle = async () => {
     if (!user) {
-      alert("Please log in to follow vendors");
+      toast.error("Please log in to follow vendors");
       return;
     }
 
@@ -60,7 +61,7 @@ const VendorProfileView = () => {
 
   const handleMessage = () => {
     if (!user) {
-      alert("Please log in to message vendors");
+      toast.error("Please log in to message vendors");
       return;
     }
 

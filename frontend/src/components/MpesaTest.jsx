@@ -7,6 +7,7 @@
  */
 
 import { useState } from "react";
+import { toast } from "react-toastify";
 import "./MpesaTest.css";
 
 const MpesaTest = () => {
@@ -19,7 +20,7 @@ const MpesaTest = () => {
     // Validate phone number
     const phoneRegex = /^(07\d{8}|254\d{9}|\+254\d{9})$/;
     if (!phoneRegex.test(phoneNumber.replace(/[\s-]/g, ""))) {
-      alert(
+      toast.error(
         "Please enter a valid Kenyan M-Pesa number:\n• 07XXXXXXXX\n• 254XXXXXXXXX\n• +254XXXXXXXXX"
       );
       return;
@@ -27,7 +28,7 @@ const MpesaTest = () => {
 
     // Validate amount
     if (amount < 1) {
-      alert("Minimum amount is KSh 1");
+      toast.error("Minimum amount is KSh 1");
       return;
     }
 
@@ -36,7 +37,7 @@ const MpesaTest = () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Please log in first");
+        toast.error("Please log in first");
         setLoading(false);
         return;
       }
@@ -74,7 +75,7 @@ const MpesaTest = () => {
         });
 
         // Show success message
-        alert(
+        toast.success(
           `🎉 M-Pesa STK Push Sent!\n\n` +
             `📱 Check your phone (${phoneNumber}) for the M-Pesa prompt\n` +
             `💰 Amount: KSh ${amount}\n` +
@@ -83,7 +84,7 @@ const MpesaTest = () => {
         );
       } else {
         console.error("❌ STK Push failed:", result);
-        alert(
+        toast.error(
           `❌ Payment Failed\n\n${
             result.message || result.error
           }\n\nPlease try again.`
@@ -91,7 +92,7 @@ const MpesaTest = () => {
       }
     } catch (error) {
       console.error("STK Push error:", error);
-      alert(
+      toast.error(
         "❌ Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
       );
     } finally {
