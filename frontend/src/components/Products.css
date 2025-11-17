@@ -1,3 +1,151 @@
+/* Location Status */
+.location-status {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+  padding: 0 1rem;
+}
+
+.location-enabled,
+.location-loading,
+.location-disabled,
+.location-prompt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  background-color: #f8f9fa;
+  border: 1px solid #e9ecef;
+}
+
+.location-enabled {
+  background-color: #d4edda;
+  border-color: #c3e6cb;
+  color: #155724;
+}
+
+.location-loading {
+  background-color: #fff3cd;
+  border-color: #ffeaa7;
+  color: #856404;
+}
+
+.location-disabled {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+  color: #721c24;
+}
+
+.location-prompt {
+  background-color: #cce7ff;
+  border-color: #b3d7ff;
+  color: #004085;
+}
+
+.location-icon {
+  font-size: 1.1rem;
+}
+
+.enable-location-btn {
+  padding: 0.4rem 0.8rem;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+.enable-location-btn:hover {
+  background-color: #0056b3;
+}
+
+/* Shopping Mode Toggle */
+.shopping-mode-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 1rem 0;
+  padding: 0 1rem;
+}
+
+.toggle-container {
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  border: 1px solid #e9ecef;
+  max-width: 500px;
+  width: 100%;
+}
+
+.toggle-label {
+  display: block;
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 0.95rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+
+.toggle-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  justify-content: center;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: 2px solid #dee2e6;
+  background-color: white;
+  color: #6c757d;
+  border-radius: 25px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  flex: 1;
+  justify-content: center;
+  max-width: 140px;
+}
+
+.toggle-btn:not(:disabled):hover {
+  border-color: #adb5bd;
+  background-color: #f8f9fa;
+}
+
+.toggle-btn.active {
+  background-color: #27ae60;
+  color: white;
+  border-color: #27ae60;
+  box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #e9ecef;
+}
+
+.toggle-icon {
+  font-size: 1rem;
+}
+
+.toggle-description {
+  font-size: 0.85rem;
+  color: #6c757d;
+  text-align: center;
+  margin: 0;
+  font-style: italic;
+}
+
 /* Category Filter */
 .category-filter {
   display: flex;

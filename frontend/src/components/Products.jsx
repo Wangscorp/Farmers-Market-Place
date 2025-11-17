@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "../api";
 import { useCart } from "./CartContext";
 import { useUser } from "../hooks/useUser";
+import { useContext } from "react";
+import { UserContext } from "./UserContext";
 import "./Products.css";
 import Chat from "./Chat";
 
@@ -11,11 +13,49 @@ const Products = () => {
   const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [locationBasedShopping, setLocationBasedShopping] = useState(() => {
+    // Load preference from localStorage, default to true
+    return localStorage.getItem('locationBasedShopping') !== 'false';
+  });
+
+  // Function to toggle location-based shopping
+  const toggleLocationBasedShopping = () => {
+    const newValue = !locationBasedShopping;
+    setLocationBasedShopping(newValue);
+    localStorage.setItem('locationBasedShopping', newValue.toString());
+    // Refetch products with the new preference
+    fetchProducts();
+  };
+
+  const fetchProducts = async () => {
+    try {
+      // Determine URL based on location-based shopping preference
+      let url = "/products";
+      const params = [];
+
+      // Only include location parameters if location-based shopping is enabled and location is available
+      if (locationBasedShopping && location) {
+        params.push(`lat=${encodeURIComponent(location.latitude)}`);
+        params.push(`lng=${encodeURIComponent(location.longitude)}`);
+        params.push(`max_distance=50`);
+      }
+
+      if (params.length > 0) {
+        url += `?${params.join('&')}`;
+      }
+
+      const response = await axios.get(url);
+      setProducts(response.data);
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    }
+  };
 
   const [chatUser, setChatUser] = useState(null); // {id, username} for chat
   const [quantities, setQuantities] = useState({}); // Store quantity for each product
   const { addToCart } = useCart();
   const { user } = useUser();
+  const { location, locationError, locationLoading, requestLocation } = useContext(UserContext);
 
   // Define category mappings
   const categoryMapping = {
@@ -55,16 +95,8 @@ const Products = () => {
   };
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await axios.get("/products");
-        setProducts(response.data);
-      } catch (error) {
-        console.error("Error fetching products:", error);
-      }
-    };
     fetchProducts();
-  }, []);
+  }, [location, locationBasedShopping]); // Refetch when location or preference changes
 
   const getFilteredProducts = () => {
     if (selectedCategory === "All") {
@@ -143,9 +175,81 @@ const Products = () => {
     }
   };
 
+  const handleEnableLocation = async () => {
+    try {
+      await requestLocation();
+      toast.success("Location enabled! Products will now be filtered by your location.");
+    } catch {
+      toast.error("Unable to access location. Please check your browser permissions.");
+    }
+  };
+
   return (
     <div>
       <h2>Available Products</h2>
+
+      {/* Location Status */}
+      <div className="location-status">
+        {location ? (
+          <div className="location-enabled">
+            <span className="location-icon">📍</span>
+            <span>Location-based filtering enabled</span>
+          </div>
+        ) : locationLoading ? (
+          <div className="location-loading">
+            <span>Loading location...</span>
+          </div>
+        ) : locationError ? (
+          <div className="location-disabled">
+            <span className="location-icon">⚠️</span>
+            <span>Location not available. </span>
+            <button onClick={handleEnableLocation} className="enable-location-btn">
+              Enable Location
+            </button>
+          </div>
+        ) : (
+          <div className="location-prompt">
+            <span className="location-icon">📍</span>
+            <span>Enable location to see products near you. </span>
+            <button onClick={handleEnableLocation} className="enable-location-btn">
+              Enable Location
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Shopping Mode Toggle */}
+      <div className="shopping-mode-toggle">
+        <div className="toggle-container">
+          <label className="toggle-label">
+            Shopping Mode:
+          </label>
+          <div className="toggle-buttons">
+            <button
+              className={`toggle-btn ${locationBasedShopping ? 'active' : ''}`}
+              onClick={toggleLocationBasedShopping}
+              disabled={!location} // Disabled if no location available
+              title={location ? "Find products from nearby vendors (within 50km)" : "Location not available"}
+            >
+              <span className="toggle-icon">📍</span>
+              Local Shops
+            </button>
+            <button
+              className={`toggle-btn ${!locationBasedShopping ? 'active' : ''}`}
+              onClick={toggleLocationBasedShopping}
+            >
+              <span className="toggle-icon">🌎</span>
+              All Shops
+            </button>
+          </div>
+          <p className="toggle-description">
+            {locationBasedShopping
+              ? "Browse products from vendors within your area"
+              : "Browse products from all vendors nationwide"
+            }
+          </p>
+        </div>
+      </div>
 
       {/* Category Filter Tabs */}
       <div className="category-filter">

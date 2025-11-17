@@ -266,54 +266,6 @@ pub async fn init_db() -> PgPool {
         .expect("Failed to create default admin user");
     }
 
-    // Create Mercy user if not exists
-    let mercy_exists: (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
-    )
-    .bind("Mercy")
-    .fetch_one(&pool)
-    .await
-    .unwrap_or((false,));
-
-    if !mercy_exists.0 {
-        let mercy_hash = hash("password123", DEFAULT_COST).unwrap();
-        sqlx::query(
-            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
-        )
-        .bind("Mercy")
-        .bind("mercy@example.com")
-        .bind(mercy_hash)
-        .bind("Customer")
-        .bind(true)
-        .execute(&pool)
-        .await
-        .expect("Failed to create Mercy user");
-    }
-
-    // Create Risper user if not exists
-    let risper_exists: (bool,) = sqlx::query_as(
-        "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)",
-    )
-    .bind("Risper")
-    .fetch_one(&pool)
-    .await
-    .unwrap_or((false,));
-
-    if !risper_exists.0 {
-        let risper_hash = hash("password123", DEFAULT_COST).unwrap();
-        sqlx::query(
-            "INSERT INTO users (username, email, password_hash, role, verified) VALUES ($1, $2, $3, $4, $5)",
-        )
-        .bind("Risper")
-        .bind("risper@example.com")
-        .bind(risper_hash)
-        .bind("Vendor")
-        .bind(true)
-        .execute(&pool)
-        .await
-        .expect("Failed to create Risper user");
-    }
-
     // No sample products - users will create them through the interface
 
     pool

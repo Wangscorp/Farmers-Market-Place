@@ -1,24 +1,47 @@
 .home {
   text-align: center;
-  padding: 3rem;
-  max-width: 800px;
+  padding: 4rem 2rem;
+  max-width: 900px;
   margin: 0 auto;
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .home h2 {
-  font-size: 2.5rem;
-  margin-bottom: 1rem;
+  font-size: 3rem;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, #1f5a2f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.2;
 }
 
 .home p {
-  font-size: 1.2rem;
-  margin-bottom: 2rem;
-  color: #2f4f2f;
+  font-size: 1.3rem;
+  margin-bottom: 2.5rem;
+  color: var(--text-light);
+  max-width: 600px;
+  line-height: 1.7;
 }
 
 .home button {
   font-size: 1.2rem;
-  padding: 0.8rem 1.5rem;
+  padding: 1rem 2.5rem;
+  box-shadow: 0 8px 20px rgba(44, 125, 66, 0.25);
+  border-radius: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.home button:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(44, 125, 66, 0.35);
 }
 
 /* Responsive Design */

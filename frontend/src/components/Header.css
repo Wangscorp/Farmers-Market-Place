@@ -1,11 +1,13 @@
 header {
-  background-color: var(--header-bg);
+  background: linear-gradient(180deg, #ffffff 0%, #fdfdfd 100%);
   color: var(--text-color);
   padding: 1rem 2rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   position: sticky;
   top: 0;
   z-index: 1000;
+  border-bottom: 1px solid rgba(44, 125, 66, 0.1);
+  backdrop-filter: blur(10px);
 }
 
 .header-container {
@@ -20,8 +22,13 @@ header h1 {
   margin: 0;
   font-family: var(--font-display);
   font-size: 1.8rem;
-  color: var(--primary-color);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary-color) 0%, #1f5a2f 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   white-space: nowrap;
+  letter-spacing: -0.5px;
 }
 
 /* Hamburger Menu */
@@ -58,37 +65,68 @@ nav a {
   color: var(--text-color);
   text-decoration: none;
   font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  padding: 0.6rem 1.2rem;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  font-size: 0.95rem;
 }
 
-nav a:hover,
+nav a::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 70%;
+  height: 2px;
+  background: var(--primary-color);
+  transition: transform 0.3s ease;
+}
+
+nav a:hover {
+  color: var(--primary-color);
+  background-color: rgba(44, 125, 66, 0.08);
+}
+
+nav a:hover::after {
+  transform: translateX(-50%) scaleX(1);
+}
+
 nav a.active {
   background-color: var(--primary-color);
   color: white;
+  box-shadow: 0 4px 8px rgba(44, 125, 66, 0.2);
+}
+
+nav a.active::after {
+  display: none;
 }
 
 .logout-btn {
-  background: none;
+  background: transparent;
   border: 2px solid var(--secondary-color);
   color: var(--secondary-color);
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.2rem;
   cursor: pointer;
   font-weight: 600;
-  border-radius: 8px;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: none;
 }
 
 .logout-btn:hover {
   background-color: var(--secondary-color);
   color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(242, 166, 90, 0.3);
 }
 
 .welcome-text {
   font-weight: 600;
   color: var(--primary-color);
-  margin-right: 1rem;
+  margin-right: 0.75rem;
+  font-size: 0.95rem;
 }
 
 /* User Profile Icon */
