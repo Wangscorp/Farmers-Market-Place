@@ -27,6 +27,9 @@ pub struct User {
     pub secondary_email: Option<String>,
     pub mpesa_number: Option<String>,
     pub payment_preference: Option<String>,
+    pub latitude: Option<f64>, // User's location for product filtering
+    pub longitude: Option<f64>, // User's location for product filtering
+    pub location_string: Option<String>, // Human-readable location (city, country)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -49,6 +52,9 @@ pub struct SignupRequest {
     pub password: String,
     pub role: Option<String>, // "Customer" or "Vendor", defaults to "Customer"
     pub profile_image: Option<String>, // Base64 encoded image
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub location_string: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

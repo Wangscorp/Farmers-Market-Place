@@ -64,6 +64,25 @@ pub async fn init_db() -> PgPool {
     .execute(&pool)
     .await;
 
+    // Add location columns for geolocation filtering
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS latitude FLOAT8"
+    )
+    .execute(&pool)
+    .await;
+
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS longitude FLOAT8"
+    )
+    .execute(&pool)
+    .await;
+
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS location_string TEXT"
+    )
+    .execute(&pool)
+    .await;
+
     // Create products table if not exists
     sqlx::query(
         r#"
@@ -300,7 +319,7 @@ pub async fn init_db() -> PgPool {
     pool
 }
 
-pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &str, role: &Role, profile_image: Option<&str>) -> Result<User, sqlx::Error> {
+pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &str, role: &Role, profile_image: Option<&str>, latitude: Option<f64>, longitude: Option<f64>, location_string: Option<&str>) -> Result<User, sqlx::Error> {
     let password_hash = hash(password, DEFAULT_COST).map_err(|_| sqlx::Error::RowNotFound)?;
     let role_str = match role {
         Role::Admin => "Admin",
@@ -311,8 +330,8 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
     let row = if let Some(image) = profile_image {
         sqlx::query(
             r#"
-            INSERT INTO users (username, email, password_hash, role, profile_image, verified)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO users (username, email, password_hash, role, profile_image, verified, latitude, longitude, location_string)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING id, username, email, role, profile_image, verified
             "#,
         )
@@ -322,13 +341,16 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(role_str)
         .bind(image)
         .bind(false)  // Vendors are not auto-verified anymore
+        .bind(latitude)
+        .bind(longitude)
+        .bind(location_string)
         .fetch_one(pool)
         .await?
     } else {
         sqlx::query(
             r#"
-            INSERT INTO users (username, email, password_hash, role, verified)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO users (username, email, password_hash, role, verified, latitude, longitude, location_string)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING id, username, email, role, profile_image, verified
             "#,
         )
@@ -337,6 +359,9 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(password_hash)
         .bind(role_str)
         .bind(false)  // All new users start as unverified
+        .bind(latitude)
+        .bind(longitude)
+        .bind(location_string)
         .fetch_one(pool)
         .await?
     };
@@ -358,6 +383,9 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         secondary_email: None,
         mpesa_number: None,
         payment_preference: None,
+        latitude: None,
+        longitude: None,
+        location_string: None,
     };
 
     Ok(user)
@@ -399,6 +427,9 @@ pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) ->
         secondary_email: None,
         mpesa_number: None,
         payment_preference: None,
+        latitude: None,
+        longitude: None,
+        location_string: None,
     };
 
     Ok(user)
@@ -788,7 +819,7 @@ pub async fn remove_from_cart_with_user(pool: &PgPool, cart_item_id: i32, user_i
 pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, username, email, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference
+        SELECT id, username, email, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, latitude, longitude, location_string
         FROM users
         ORDER BY id
         "#,
@@ -815,6 +846,9 @@ pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> {
             secondary_email: row.try_get(7)?,
             mpesa_number: row.try_get(8)?,
             payment_preference: row.try_get(9)?,
+            latitude: row.try_get(10)?,
+            longitude: row.try_get(11)?,
+            location_string: row.try_get(12)?,
         };
         users.push(user);
     }
@@ -979,7 +1013,7 @@ pub async fn delete_user(pool: &PgPool, user_id: i32) -> Result<(), sqlx::Error>
     Ok(())
 }
 
-pub async fn get_all_products(pool: &PgPool, vendor_filter: Option<i32>) -> Result<Vec<Product>, sqlx::Error> {
+pub async fn get_all_products(pool: &PgPool, vendor_filter: Option<i32>, user_lat: Option<String>, user_lng: Option<String>, max_distance: f64) -> Result<Vec<Product>, sqlx::Error> {
     let rows = if let Some(vendor_id) = vendor_filter {
         sqlx::query(
             r#"
@@ -992,6 +1026,44 @@ pub async fn get_all_products(pool: &PgPool, vendor_filter: Option<i32>) -> Resu
         .bind(vendor_id)
         .fetch_all(pool)
         .await?
+    } else if let (Some(lat_str), Some(lng_str)) = (user_lat.as_ref(), user_lng.as_ref()) {
+        // Parse latitude and longitude
+        if let (Ok(user_lat), Ok(user_lng)) = (lat_str.parse::<f64>(), lng_str.parse::<f64>()) {
+            sqlx::query(
+                r#"
+                SELECT p.id, p.name, p.price, p.category, p.description, p.image, p.quantity, p.vendor_id
+                FROM products p
+                JOIN users u ON p.vendor_id = u.id
+                WHERE u.verified = TRUE AND u.banned = FALSE
+                AND u.latitude IS NOT NULL AND u.longitude IS NOT NULL
+                AND (
+                    6371 * acos(
+                        cos(radians($1)) * cos(radians(u.latitude)) * cos(radians(u.longitude) - radians($2))
+                        + sin(radians($1)) * sin(radians(u.latitude))
+                    )
+                ) <= $3
+                ORDER BY p.id
+                "#,
+            )
+            .bind(user_lat)
+            .bind(user_lng)
+            .bind(max_distance)
+            .fetch_all(pool)
+            .await?
+        } else {
+            // Invalid lat/lng values, return all products
+            sqlx::query(
+                r#"
+                SELECT p.id, p.name, p.price, p.category, p.description, p.image, p.quantity, p.vendor_id
+                FROM products p
+                JOIN users u ON p.vendor_id = u.id
+                WHERE u.verified = TRUE AND u.banned = FALSE
+                ORDER BY p.id
+                "#,
+            )
+            .fetch_all(pool)
+            .await?
+        }
     } else {
         sqlx::query(
             r#"

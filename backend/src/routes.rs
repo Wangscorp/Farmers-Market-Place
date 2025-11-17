@@ -35,7 +35,15 @@ async fn get_products(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> A
         None // No auth, show all
     };
 
-    match db::get_all_products(&pool, vendor_filter).await {
+    // Extract location parameters for filtering
+    let query_string = req.query_string();
+    let location_lat = extract_query_param(&query_string, "lat");
+    let location_lng = extract_query_param(&query_string, "lng");
+    let max_distance = extract_query_param(&query_string, "max_distance")
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(50.0); // Default 50 km
+
+    match db::get_all_products(&pool, vendor_filter, location_lat, location_lng, max_distance).await {
         Ok(products) => Ok(HttpResponse::Ok().json(products)),
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to fetch products: {:?}", e))),
     }
@@ -191,7 +199,7 @@ async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> Actix
     };
 
     // Attempt to create new user in database
-    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref()).await {
+    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.latitude, req.longitude, req.location_string.as_deref()).await {
         Ok(user) => Ok(HttpResponse::Created().json(user)),           // 201 Created with user data
         // Handle unique constraint violations (duplicate username/email)
         Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
@@ -619,6 +627,19 @@ fn check_customer_auth(req: &actix_web::HttpRequest) -> Result<i32, HttpResponse
         return Err(HttpResponse::Forbidden().json("Customer privileges required"));
     }
     Ok(claims.sub)
+}
+
+fn extract_query_param(query_string: &str, param_name: &str) -> Option<String> {
+    let params = query_string.trim_start_matches('?');
+    for pair in params.split('&') {
+        let mut parts = pair.split('=');
+        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+            if key == param_name {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 // ADMIN ROUTES
@@ -1156,6 +1177,48 @@ struct UpdateAdminCredentialsRequest {
     current_password: String,
     new_username: Option<String>,
     new_password: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct UpdateLocationRequest {
+    latitude: f64,
+    longitude: f64,
+    location_string: Option<String>,
+}
+
+/**
+ * POST /location/update - Update user location
+ *
+ * Allows authenticated users to update their location coordinates.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param location_req - JSON request with latitude, longitude, and optional location_string
+ * @returns Success message
+ */
+#[post("/location/update")]
+async fn update_location(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    location_req: web::Json<UpdateLocationRequest>,
+) -> ActixResult<HttpResponse> {
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match sqlx::query(
+        "UPDATE users SET latitude = $1, longitude = $2, location_string = $3 WHERE id = $4"
+    )
+    .bind(location_req.latitude)
+    .bind(location_req.longitude)
+    .bind(&location_req.location_string)
+    .bind(user_id)
+    .execute(pool.get_ref())
+    .await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Location updated successfully")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update location")),
+    }
 }
 
 // Profile image update endpoint for users to update their own profile images
@@ -1885,6 +1948,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(signup);             // POST /signup
     cfg.service(update_profile_image); // PATCH /profile/image
     cfg.service(update_profile);     // PATCH /profile
+    cfg.service(update_location);    // POST /location/update
     cfg.service(update_admin_credentials); // PATCH /admin/credentials
     cfg.service(get_vendor_profile_route); // GET /vendors/{vendor_id}/profile
 
