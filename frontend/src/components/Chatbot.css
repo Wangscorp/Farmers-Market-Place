@@ -54,19 +54,28 @@
 
 /* Chatbot Header */
 .chatbot-header {
-  background: linear-gradient(135deg, #4caf50, #45a049);
+  background: linear-gradient(135deg, #2e7d32, #388e3c);
   color: white;
-  padding: 16px 20px;
+  padding: 18px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   border-radius: 12px 12px 0 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .chatbot-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.chatbot-subtitle {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  opacity: 0.9;
+  font-weight: 400;
 }
 
 .chatbot-close {
