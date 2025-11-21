@@ -79,7 +79,7 @@ const VendorSetup = () => {
   return (
     <div className="vendor-setup">
       <div className="setup-container">
-        <h2>Welcome to Farmers Market Place! 🎉</h2>
+        <h2>Welcome to Farmers Market Place!</h2>
         <p className="setup-intro">
           Complete your vendor profile to get started. These details are
           required for:

@@ -1,28 +1,16 @@
-/**
- * HTTP Route handlers for the Farmers Market Place API
- *
- * This module defines the REST API endpoints that the frontend React application calls.
- * All routes handle CRUD operations for products, user authentication, and registration.
- */
+//! HTTP route handlers for the Farmers Market Place API.
+//! Provides endpoints for products, authentication, cart, messaging, and M-Pesa checkout.
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest};
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, VerifyDeliveryRequest, WithdrawRequest, WithdrawResponse};
 use crate::db;  // Database helper functions
 use crate::mpesa::{MpesaClient, MpesaConfig, StkCallbackBody, extract_callback_data, PaymentStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::OnceLock;
 
-/**
- * GET /products - Retrieve all available products
- *
- * Returns a JSON array of all products currently available in the marketplace.
- * Currently uses mock data - in production this would fetch from database.
- *
- * @param _pool - PostgreSQL connection pool (not used for mock data)
- * @returns JSON array of Product objects
- */
+/// GET /products - Retrieve all products, optionally filtered by vendor or location.
 #[get("/products")]
 async fn get_products(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> ActixResult<HttpResponse> {
     let vendor_filter = if let Ok(claims) = extract_auth(&req) {
@@ -35,30 +23,17 @@ async fn get_products(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> A
         None // No auth, show all
     };
 
-    // Extract location parameters for filtering
+    // Extract location string for filtering (e.g., "Nakuru")
     let query_string = req.query_string();
-    let location_lat = extract_query_param(&query_string, "lat");
-    let location_lng = extract_query_param(&query_string, "lng");
-    let max_distance = extract_query_param(&query_string, "max_distance")
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or(50.0); // Default 50 km
+    let user_location = extract_query_param(&query_string, "location");
 
-    match db::get_all_products(&pool, vendor_filter, location_lat, location_lng, max_distance).await {
+    match db::get_all_products(&pool, vendor_filter, user_location).await {
         Ok(products) => Ok(HttpResponse::Ok().json(products)),
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to fetch products: {:?}", e))),
     }
 }
 
-/**
- * POST /products - Create a new product
- *
- * Allows vendors to add new products to the marketplace.
- * Currently returns mock data - in production would save to database.
- *
- * @param _pool - PostgreSQL connection pool
- * @param req - JSON request body with product details
- * @returns JSON of created product or error
- */
+/// POST /products - Create a new product (verified vendors only).
 #[post("/products")]
 async fn create_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, product_req: web::Json<ProductRequest>) -> ActixResult<HttpResponse> {
     let vendor_id = match check_vendor_auth(&req) {
@@ -104,18 +79,7 @@ async fn create_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, pr
     }
 }
 
-/**
- * PUT /products/{product_id} - Update an existing product
- *
- * Allows vendors to update their own products.
- * Vendor can only update products they own.
- *
- * @param req - HTTP request for authentication
- * @param pool - PostgreSQL connection pool
- * @param product_id - Product ID from URL path
- * @param product_req - JSON request body with updated product details
- * @returns JSON of updated product or error
- */
+/// PATCH /products/{product_id} - Update a product (owner only).
 #[patch("/products/{product_id}")]
 async fn update_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, product_id: web::Path<i32>, product_req: web::Json<ProductRequest>) -> ActixResult<HttpResponse> {
     let vendor_id = match check_vendor_auth(&req) {
@@ -129,17 +93,7 @@ async fn update_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, pr
     }
 }
 
-/**
- * DELETE /products/{product_id} - Delete a product
- *
- * Allows vendors to delete their own products.
- * Vendor can only delete products they own.
- *
- * @param req - HTTP request for authentication
- * @param pool - PostgreSQL connection pool
- * @param product_id - Product ID from URL path
- * @returns Empty response on success
- */
+/// DELETE /products/{product_id} - Delete a product (owner only).
 #[delete("/products/{product_id}")]
 async fn delete_product(req: actix_web::HttpRequest, pool: web::Data<PgPool>, product_id: web::Path<i32>) -> ActixResult<HttpResponse> {
     let vendor_id = match check_vendor_auth(&req) {
@@ -192,6 +146,23 @@ async fn login(pool: web::Data<PgPool>, req: web::Json<LoginRequest>) -> ActixRe
  */
 #[post("/signup")]
 async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> ActixResult<HttpResponse> {
+    // Validate password requirements
+    if req.password.len() < 8 {
+        return Ok(HttpResponse::BadRequest().json("Password must be at least 8 characters"));
+    }
+    if !req.password.chars().any(|c| c.is_uppercase()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one uppercase letter"));
+    }
+    if !req.password.chars().any(|c| c.is_lowercase()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one lowercase letter"));
+    }
+    if !req.password.chars().any(|c| c.is_numeric()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one number"));
+    }
+    if !req.password.chars().any(|c| "!@#$%^&*(),.?\":{}|<>".contains(c)) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one special character"));
+    }
+
     // Convert string role to enum, defaulting to Customer
     let role = match req.role.as_deref().unwrap_or("Customer") {
         "Vendor" => Role::Vendor,
@@ -199,7 +170,7 @@ async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> Actix
     };
 
     // Attempt to create new user in database
-    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.latitude, req.longitude, req.location_string.as_deref()).await {
+    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.location_string.as_deref()).await {
         Ok(user) => Ok(HttpResponse::Created().json(user)),           // 201 Created with user data
         // Handle unique constraint violations (duplicate username/email)
         Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
@@ -431,7 +402,16 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
                     println!("✅ STK Push initiated successfully");
                     println!("📋 Transaction ID: {}", stk_response.checkout_request_i_d);
 
-                    // Store payment transaction in database
+                    // Convert selected cart item IDs to comma-separated string
+                    let cart_item_ids_str = if let Some(selected) = &checkout_req.selected_items {
+                        Some(selected.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(","))
+                    } else {
+                        // If no items selected, get all cart item IDs
+                        let all_ids = cart_items.iter().map(|item| item.id.to_string()).collect::<Vec<_>>().join(",");
+                        Some(all_ids)
+                    };
+
+                    // Store payment transaction in database with selected cart items
                     match db::create_payment_transaction(
                         &pool,
                         user_id,
@@ -439,6 +419,7 @@ async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout
                         &stk_response.merchant_request_i_d,
                         &formatted_phone,
                         checkout_req.total_amount,
+                        cart_item_ids_str.as_deref(),
                     ).await {
                         Ok(transaction_id) => {
                             println!("💾 Payment transaction stored with ID: {}", transaction_id);
@@ -1170,6 +1151,10 @@ struct UpdateProfileRequest {
     secondary_email: Option<String>,
     mpesa_number: Option<String>,
     payment_preference: Option<String>,
+    location_string: Option<String>,
+    profile_image: Option<String>,
+    current_password: Option<String>,
+    new_password: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1257,6 +1242,79 @@ async fn update_profile(
             let response = json!({
                 "message": "Profile updated successfully",
                 "new_username": request.username
+            });
+            Ok(HttpResponse::Ok().json(response))
+        }
+        Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
+            Ok(HttpResponse::Conflict().json("Username or email already exists"))
+        }
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update profile")),
+    }
+}
+
+// Comprehensive profile update endpoint - handles all profile fields including password
+#[actix_web::put("/user/profile")]
+async fn update_user_profile_comprehensive(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    request: web::Json<UpdateProfileRequest>,
+) -> ActixResult<HttpResponse> {
+    let claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    // If password change is requested, verify current password first
+    if let (Some(current_pwd), Some(new_pwd)) = (&request.current_password, &request.new_password) {
+        // Verify current password
+        let row = match sqlx::query("SELECT password_hash FROM users WHERE id = $1")
+            .bind(claims.sub)
+            .fetch_one(pool.get_ref())
+            .await {
+            Ok(r) => r,
+            Err(_) => return Ok(HttpResponse::InternalServerError().json("Failed to verify password")),
+        };
+
+        let stored_hash: String = row.try_get(0).unwrap();
+        let is_valid = bcrypt::verify(current_pwd, &stored_hash).unwrap_or(false);
+
+        if !is_valid {
+            return Ok(HttpResponse::Unauthorized().json("Current password is incorrect"));
+        }
+
+        // Update password
+        if let Err(_) = db::reset_user_password(&pool, claims.sub, new_pwd).await {
+            return Ok(HttpResponse::InternalServerError().json("Failed to update password"));
+        }
+    }
+
+    // Update profile image if provided
+    if let Some(profile_img) = &request.profile_image {
+        if let Err(_) = db::update_user_profile_image(&pool, claims.sub, profile_img).await {
+            return Ok(HttpResponse::InternalServerError().json("Failed to update profile image"));
+        }
+    }
+
+    // Update location if provided
+    if let Some(location) = &request.location_string {
+        if let Err(_) = sqlx::query("UPDATE users SET location_string = $1 WHERE id = $2")
+            .bind(location)
+            .bind(claims.sub)
+            .execute(pool.get_ref())
+            .await {
+            return Ok(HttpResponse::InternalServerError().json("Failed to update location"));
+        }
+    }
+
+    // Update other profile fields
+    match db::update_user_profile(&pool, claims.sub, request.username.as_deref(), request.email.as_deref(), request.secondary_email.as_deref(), request.mpesa_number.as_deref(), request.payment_preference.as_deref()).await {
+        Ok(_) => {
+            // Return updated user data
+            let response = json!({
+                "message": "Profile updated successfully",
+                "username": request.username.as_ref().unwrap_or(&claims.username),
+                "email": request.email.as_ref().unwrap_or(&"".to_string()),
+                "location_string": request.location_string.as_ref().unwrap_or(&"".to_string())
             });
             Ok(HttpResponse::Ok().json(response))
         }
@@ -1756,7 +1814,14 @@ async fn update_shipping_status_route(
     }
 
     match db::update_shipping_status(&pool, *order_id, &status_req.shipping_status, status_req.tracking_number.as_deref()).await {
-        Ok(_) => Ok(HttpResponse::Ok().json("Shipping status updated successfully")),
+        Ok(_) => {
+            // If status is "delivered", request customer verification
+            if status_req.shipping_status.to_lowercase() == "delivered" {
+                let _ = db::request_delivery_verification(&pool, *order_id).await;
+                println!("📦 Order {} marked as delivered - verification requested from customer", order_id);
+            }
+            Ok(HttpResponse::Ok().json("Shipping status updated successfully"))
+        },
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to update shipping status")),
     }
 }
@@ -1844,11 +1909,30 @@ async fn mpesa_callback(
             eprintln!("Failed to update payment transaction: {:?}", e);
         }
 
-        // Get user's cart and create shipping orders
+        // Get user's cart items
         match db::get_cart_items(&pool, transaction.user_id).await {
-            Ok(cart_items) => {
-                // Create shipping orders for each cart item
-                for item in &cart_items {
+            Ok(all_cart_items) => {
+                // Filter cart items based on what was actually selected for this payment
+                let items_to_process = if let Some(cart_item_ids_str) = &transaction.cart_item_ids {
+                    // Parse the comma-separated cart item IDs
+                    let selected_ids: Vec<i32> = cart_item_ids_str
+                        .split(',')
+                        .filter_map(|id| id.trim().parse().ok())
+                        .collect();
+                    
+                    // Only process the selected cart items
+                    all_cart_items.into_iter()
+                        .filter(|item| selected_ids.contains(&item.id))
+                        .collect::<Vec<_>>()
+                } else {
+                    // If no specific items were stored, process all cart items (backward compatibility)
+                    all_cart_items
+                };
+
+                println!("📦 Processing {} cart items for shipping orders", items_to_process.len());
+
+                // Create shipping orders only for selected items
+                for item in &items_to_process {
                     match db::create_shipping_order(
                         &pool,
                         transaction.user_id,
@@ -1856,19 +1940,21 @@ async fn mpesa_callback(
                         item.quantity,
                         "Default shipping address - please update in your orders"
                     ).await {
-                        Ok(_) => println!("Shipping order created for product {}", item.product_id),
-                        Err(e) => eprintln!("Failed to create shipping order: {:?}", e),
+                        Ok(_) => println!("✅ Shipping order created for product {} (qty: {})", item.product_id, item.quantity),
+                        Err(e) => eprintln!("❌ Failed to create shipping order: {:?}", e),
                     }
                 }
 
-                // Clear the cart after successful payment
-                for item in &cart_items {
+                // Clear only the selected items from the cart
+                for item in &items_to_process {
                     if let Err(e) = db::remove_from_cart_with_user(&pool, item.id, transaction.user_id).await {
-                        eprintln!("Failed to remove cart item {}: {:?}", item.id, e);
+                        eprintln!("❌ Failed to remove cart item {}: {:?}", item.id, e);
+                    } else {
+                        println!("🗑️ Removed cart item {} from user {}'s cart", item.id, transaction.user_id);
                     }
                 }
             }
-            Err(e) => eprintln!("Failed to get cart items: {:?}", e),
+            Err(e) => eprintln!("❌ Failed to get cart items: {:?}", e),
         }
 
         PaymentStatus::Completed.to_string()
@@ -1932,6 +2018,310 @@ async fn get_payment_history(
 }
 
 /**
+ * POST /payments/process-completed - Manually process completed payments
+ *
+ * This endpoint helps recover from failed callback processing.
+ * It checks for completed payments that haven't created shipping orders yet.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON response with processing results
+ */
+#[post("/payments/process-completed")]
+async fn process_completed_payments(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    println!("🔄 Manually processing completed payments for user: {}", user_id);
+
+    // Get user's completed payment transactions
+    match db::get_user_payment_transactions(&pool, user_id).await {
+        Ok(transactions) => {
+            let mut processed = 0;
+            let mut orders_created = 0;
+            let mut errors = Vec::new();
+
+            for transaction in transactions {
+                // Only process completed payments
+                if transaction.status != "completed" {
+                    continue;
+                }
+
+                // Check if shipping orders already exist for this transaction
+                // (You may need to add a field to track this or check for existing orders)
+                
+                // Get user's cart items at time of payment
+                match db::get_cart_items(&pool, user_id).await {
+                    Ok(all_cart_items) => {
+                        let items_to_process = if let Some(cart_item_ids_str) = &transaction.cart_item_ids {
+                            let selected_ids: Vec<i32> = cart_item_ids_str
+                                .split(',')
+                                .filter_map(|id| id.trim().parse().ok())
+                                .collect();
+                            
+                            all_cart_items.into_iter()
+                                .filter(|item| selected_ids.contains(&item.id))
+                                .collect::<Vec<_>>()
+                        } else {
+                            all_cart_items
+                        };
+
+                        if items_to_process.is_empty() {
+                            println!("⚠️ No cart items found for transaction {}", transaction.id);
+                            continue;
+                        }
+
+                        processed += 1;
+                        
+                        // Create shipping orders
+                        for item in &items_to_process {
+                            match db::create_shipping_order(
+                                &pool,
+                                user_id,
+                                item.product_id,
+                                item.quantity,
+                                "Default shipping address - please update in your orders"
+                            ).await {
+                                Ok(_) => {
+                                    println!("✅ Shipping order created for product {} (qty: {})", item.product_id, item.quantity);
+                                    orders_created += 1;
+                                },
+                                Err(e) => {
+                                    let error_msg = format!("Failed to create shipping order for product {}: {:?}", item.product_id, e);
+                                    eprintln!("❌ {}", error_msg);
+                                    errors.push(error_msg);
+                                }
+                            }
+                        }
+
+                        // Clear items from cart
+                        for item in &items_to_process {
+                            if let Err(e) = db::remove_from_cart_with_user(&pool, item.id, user_id).await {
+                                eprintln!("❌ Failed to remove cart item {}: {:?}", item.id, e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to get cart items: {:?}", e);
+                        eprintln!("❌ {}", error_msg);
+                        errors.push(error_msg);
+                    }
+                }
+            }
+
+            Ok(HttpResponse::Ok().json(json!({
+                "success": true,
+                "payments_processed": processed,
+                "orders_created": orders_created,
+                "errors": errors
+            })))
+        }
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch payment history")),
+    }
+}
+
+/**
+ * GET /reports/vendor/sales - Get vendor sales report
+ *
+ * Returns comprehensive sales analytics for the authenticated vendor.
+ * Includes total sales, profit, and breakdown by product.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON with sales report data
+ */
+#[get("/reports/vendor/sales")]
+async fn get_vendor_sales_report_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let claims = match extract_auth(&req) {
+        Ok(claims) => claims,
+        Err(response) => return Ok(response),
+    };
+
+    // Only vendors can access vendor reports
+    if claims.role != "Vendor" {
+        return Ok(HttpResponse::Forbidden().json("Only vendors can access sales reports"));
+    }
+
+    match db::get_vendor_sales_report(&pool, claims.sub).await {
+        Ok(report) => Ok(HttpResponse::Ok().json(report)),
+        Err(e) => {
+            eprintln!("Failed to fetch vendor sales report: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json("Failed to fetch sales report"))
+        }
+    }
+}
+
+/**
+ * GET /reports/customer/purchases - Get customer purchase report
+ *
+ * Returns comprehensive purchase analytics for the authenticated customer.
+ * Includes total spent, order count, and breakdown by category and vendor.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON with purchase report data
+ */
+#[get("/reports/customer/purchases")]
+async fn get_customer_purchase_report_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let claims = match extract_auth(&req) {
+        Ok(claims) => claims,
+        Err(response) => return Ok(response),
+    };
+
+    // Only customers can access customer reports (not vendors)
+    if claims.role != "Customer" {
+        return Ok(HttpResponse::Forbidden().json("Only customers can access purchase reports"));
+    }
+
+    match db::get_customer_purchase_report(&pool, claims.sub).await {
+        Ok(report) => Ok(HttpResponse::Ok().json(report)),
+        Err(e) => {
+            eprintln!("Failed to fetch customer purchase report: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json("Failed to fetch purchase report"))
+        }
+    }
+}
+
+/**
+ * POST /shipping/{order_id}/verify - Customer verifies delivery
+ *
+ * Allows customer to verify they received the order and releases payment to vendor's wallet.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param order_id - Order ID from URL path
+ * @param verify_req - JSON request with verification status
+ * @returns Success message
+ */
+#[post("/shipping/{order_id}/verify")]
+async fn verify_delivery_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    order_id: web::Path<i32>,
+    verify_req: web::Json<VerifyDeliveryRequest>
+) -> ActixResult<HttpResponse> {
+    let customer_id = match check_customer_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    if verify_req.verified {
+        match db::verify_delivery_and_release_payment(&pool, *order_id, customer_id).await {
+            Ok(_) => {
+                println!("✅ Order {} verified by customer {} - payment released to vendor", order_id, customer_id);
+                Ok(HttpResponse::Ok().json(json!({
+                    "message": "Delivery verified successfully. Payment has been released to the vendor's wallet."
+                })))
+            },
+            Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to verify delivery")),
+        }
+    } else {
+        // Customer disputes delivery - could trigger admin review
+        Ok(HttpResponse::Ok().json(json!({
+            "message": "Delivery dispute recorded. Please contact support for assistance."
+        })))
+    }
+}
+
+/**
+ * GET /wallet/balance - Get user's wallet balance
+ *
+ * Returns the current wallet balance for vendors.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @returns JSON with wallet balance
+ */
+#[get("/wallet/balance")]
+async fn get_wallet_balance_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    let claims = match extract_auth(&req) {
+        Ok(c) => c,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_wallet_balance(&pool, claims.sub).await {
+        Ok(balance) => Ok(HttpResponse::Ok().json(json!({
+            "balance": balance,
+            "currency": "KSh"
+        }))),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch wallet balance")),
+    }
+}
+
+/**
+ * POST /wallet/withdraw - Withdraw from wallet to M-Pesa
+ *
+ * Allows vendors to withdraw their earnings to their M-Pesa number.
+ *
+ * @param req - HTTP request for authentication
+ * @param pool - Database connection pool
+ * @param withdraw_req - JSON request with amount and M-Pesa number
+ * @returns JSON response with transaction details
+ */
+#[post("/wallet/withdraw")]
+async fn withdraw_wallet_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    withdraw_req: web::Json<WithdrawRequest>
+) -> ActixResult<HttpResponse> {
+    let user_id = match check_vendor_auth(&req) {
+        Ok(id) => id,
+        Err(response) => return Ok(response),
+    };
+
+    // Validate minimum withdrawal amount
+    if withdraw_req.amount < 10.0 {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "Minimum withdrawal amount is KSh 10"
+        })));
+    }
+
+    // Validate phone number
+    if !is_valid_kenyan_phone(&withdraw_req.mpesa_number) {
+        return Ok(HttpResponse::BadRequest().json(json!({
+            "error": "Invalid M-Pesa phone number"
+        })));
+    }
+
+    // Process withdrawal from wallet
+    match db::process_wallet_withdrawal(&pool, user_id, withdraw_req.amount).await {
+        Ok(new_balance) => {
+            // TODO: Integrate with M-Pesa B2C API to send money to vendor's phone
+            println!("💰 Withdrawal processed: User {} withdrew KSh {:.2} to {}", 
+                     user_id, withdraw_req.amount, withdraw_req.mpesa_number);
+            
+            // For now, return success (In production, integrate M-Pesa B2C API)
+            let response = WithdrawResponse {
+                success: true,
+                message: format!("Withdrawal of KSh {:.2} initiated to {}. Funds will be sent shortly.", 
+                                withdraw_req.amount, withdraw_req.mpesa_number),
+                transaction_id: Some(format!("WD_{}_{}", user_id, chrono::Utc::now().timestamp())),
+                new_balance,
+            };
+
+            Ok(HttpResponse::Ok().json(response))
+        },
+        Err(_) => Ok(HttpResponse::BadRequest().json(json!({
+            "error": "Insufficient wallet balance or withdrawal failed"
+        }))),
+    }
+}
+
+/**
  * Initialize route configuration
  *
  * Registers all HTTP route handlers with the Actix-Web service configuration.
@@ -1948,6 +2338,7 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(signup);             // POST /signup
     cfg.service(update_profile_image); // PATCH /profile/image
     cfg.service(update_profile);     // PATCH /profile
+    cfg.service(update_user_profile_comprehensive); // PUT /user/profile (comprehensive update)
     cfg.service(update_location);    // POST /location/update
     cfg.service(update_admin_credentials); // PATCH /admin/credentials
     cfg.service(get_vendor_profile_route); // GET /vendors/{vendor_id}/profile
@@ -1961,7 +2352,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
 
     // M-Pesa payment routes
     cfg.service(mpesa_callback)
-        .service(get_payment_history);
+        .service(get_payment_history)
+        .service(process_completed_payments);
 
     // Message routes
     cfg.service(send_message_route)
@@ -1985,7 +2377,20 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(create_shipping_order_route)
         .service(get_customer_shipping_orders_route)
         .service(get_vendor_shipping_orders_route)
-        .service(update_shipping_status_route);
+        .service(update_shipping_status_route)
+        .service(verify_delivery_route);
+
+    // Wallet routes
+    cfg.service(get_wallet_balance_route)
+        .service(withdraw_wallet_route);
+
+    // Analytics/Reports routes
+    cfg.service(get_vendor_sales_report_route)
+        .service(get_customer_purchase_report_route);
+
+    // Analytics/Reports routes
+    cfg.service(get_vendor_sales_report_route)
+        .service(get_customer_purchase_report_route);
 
     // Vendor report count route
     cfg.service(get_vendor_report_count);

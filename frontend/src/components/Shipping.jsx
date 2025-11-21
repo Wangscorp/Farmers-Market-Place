@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { toast } from "react-toastify";
-import axios from '../api';
-import { useUser } from '../hooks/useUser';
-import './Shipping.css';
+import axios from "../api";
+import { useUser } from "../hooks/useUser";
+import "./Shipping.css";
 
 const Shipping = () => {
   const { user } = useUser();
-  const [activeTab, setActiveTab] = useState('orders');
+  const [activeTab, setActiveTab] = useState("orders");
   const [shippingOrders, setShippingOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [reviewForm, setReviewForm] = useState({
     rating: 5,
-    comment: ''
+    comment: "",
   });
   const [showReportForm, setShowReportForm] = useState(null);
   const [reportType, setReportType] = useState("non_delivery");
@@ -29,10 +29,10 @@ const Shipping = () => {
   const loadShippingOrders = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/shipping');
+      const response = await axios.get("/shipping");
       setShippingOrders(response.data);
     } catch (error) {
-      console.error('Error loading shipping orders:', error);
+      console.error("Error loading shipping orders:", error);
     } finally {
       setLoading(false);
     }
@@ -40,10 +40,10 @@ const Shipping = () => {
 
   const loadReviews = async () => {
     try {
-      const response = await axios.get('/reviews');
+      const response = await axios.get("/reviews");
       setReviews(response.data);
     } catch (error) {
-      console.error('Error loading reviews:', error);
+      console.error("Error loading reviews:", error);
     }
   };
 
@@ -52,19 +52,40 @@ const Shipping = () => {
     if (!selectedOrder) return;
 
     try {
-      await axios.post('/reviews', {
+      await axios.post("/reviews", {
         product_id: selectedOrder.product_id,
         rating: reviewForm.rating,
-        comment: reviewForm.comment.trim() || null
+        comment: reviewForm.comment.trim() || null,
       });
 
-      toast.success('Review submitted successfully!');
+      toast.success("Review submitted successfully!");
       setSelectedOrder(null);
-      setReviewForm({ rating: 5, comment: '' });
+      setReviewForm({ rating: 5, comment: "" });
       loadReviews();
     } catch (error) {
-      console.error('Error submitting review:', error);
-      toast.success('Failed to submit review. Please try again.');
+      console.error("Error submitting review:", error);
+      toast.success("Failed to submit review. Please try again.");
+    }
+  };
+
+  const handleVerifyDelivery = async (orderId, verified) => {
+    try {
+      await axios.post(`/shipping/${orderId}/verify`, { verified });
+
+      if (verified) {
+        toast.success(
+          "Delivery verified! Payment has been released to the vendor."
+        );
+      } else {
+        toast.info(
+          "Delivery issue reported. Our support team will contact you shortly."
+        );
+      }
+
+      loadShippingOrders();
+    } catch (error) {
+      console.error("Error verifying delivery:", error);
+      toast.error("Failed to verify delivery. Please try again.");
     }
   };
 
@@ -87,7 +108,9 @@ const Shipping = () => {
         description: reportDescription.trim(),
       });
 
-      toast.success("Report submitted successfully. Admin will review it shortly.");
+      toast.success(
+        "Report submitted successfully. Admin will review it shortly."
+      );
       setShowReportForm(null);
       setReportType("non_delivery");
       setReportDescription("");
@@ -99,17 +122,22 @@ const Shipping = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return '#ffc107';
-      case 'shipped': return '#17a2b8';
-      case 'delivered': return '#28a745';
-      case 'cancelled': return '#dc3545';
-      default: return '#6c757d';
+      case "pending":
+        return "#ffc107";
+      case "shipped":
+        return "#17a2b8";
+      case "delivered":
+        return "#28a745";
+      case "cancelled":
+        return "#dc3545";
+      default:
+        return "#6c757d";
     }
   };
 
   const renderStars = (rating) => {
     return Array.from({ length: 5 }, (_, i) => (
-      <span key={i} className={i < rating ? 'star filled' : 'star'}>
+      <span key={i} className={i < rating ? "star filled" : "star"}>
         ★
       </span>
     ));
@@ -125,21 +153,21 @@ const Shipping = () => {
 
       <div className="tabs">
         <button
-          className={`tab-button ${activeTab === 'orders' ? 'active' : ''}`}
-          onClick={() => setActiveTab('orders')}
+          className={`tab-button ${activeTab === "orders" ? "active" : ""}`}
+          onClick={() => setActiveTab("orders")}
         >
           My Orders
         </button>
         <button
-          className={`tab-button ${activeTab === 'reviews' ? 'active' : ''}`}
-          onClick={() => setActiveTab('reviews')}
+          className={`tab-button ${activeTab === "reviews" ? "active" : ""}`}
+          onClick={() => setActiveTab("reviews")}
         >
           My Reviews
         </button>
       </div>
 
       <div className="tab-content">
-        {activeTab === 'orders' && (
+        {activeTab === "orders" && (
           <div className="orders-section">
             <h2>My Shipping Orders</h2>
             {loading ? (
@@ -154,25 +182,80 @@ const Shipping = () => {
                       <h3>{order.product_name}</h3>
                       <span
                         className="status-badge"
-                        style={{ backgroundColor: getStatusColor(order.shipping_status) }}
+                        style={{
+                          backgroundColor: getStatusColor(
+                            order.shipping_status
+                          ),
+                        }}
                       >
                         {order.shipping_status}
                       </span>
                     </div>
 
                     <div className="order-details">
-                      <p><strong>Vendor:</strong> {order.vendor_username}</p>
-                      <p><strong>Quantity:</strong> {order.quantity}</p>
-                      <p><strong>Total:</strong> KSh {order.total_amount.toLocaleString()}</p>
-                      <p><strong>Address:</strong> {order.shipping_address}</p>
+                      <p>
+                        <strong>Vendor:</strong> {order.vendor_username}
+                      </p>
+                      <p>
+                        <strong>Quantity:</strong> {order.quantity}
+                      </p>
+                      <p>
+                        <strong>Total:</strong> KSh{" "}
+                        {order.total_amount.toLocaleString()}
+                      </p>
+                      <p>
+                        <strong>Address:</strong> {order.shipping_address}
+                      </p>
                       {order.tracking_number && (
-                        <p><strong>Tracking:</strong> {order.tracking_number}</p>
+                        <p>
+                          <strong>Tracking:</strong> {order.tracking_number}
+                        </p>
                       )}
-                      <p><strong>Ordered:</strong> {new Date(order.created_at).toLocaleDateString()}</p>
+                      <p>
+                        <strong>Ordered:</strong>{" "}
+                        {new Date(order.created_at).toLocaleDateString()}
+                      </p>
                     </div>
 
+                    {/* Delivery Verification Alert */}
+                    {order.shipping_status === "delivered" &&
+                      order.verification_requested_at &&
+                      !order.customer_verified && (
+                        <div className="verification-alert">
+                          <p>
+                            ⚠️ Please verify if you have received this order.
+                            Payment will be released to the vendor once you
+                            confirm.
+                          </p>
+                          <div className="verification-actions">
+                            <button
+                              className="verify-yes-btn"
+                              onClick={() =>
+                                handleVerifyDelivery(order.id, true)
+                              }
+                            >
+                              ✓ Yes, I received it
+                            </button>
+                            <button
+                              className="verify-no-btn"
+                              onClick={() =>
+                                handleVerifyDelivery(order.id, false)
+                              }
+                            >
+                              ✗ No, I didn't receive it
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                    {order.customer_verified && order.payment_released && (
+                      <div className="verification-confirmed">
+                        ✓ Delivery verified. Payment released to vendor.
+                      </div>
+                    )}
+
                     <div className="order-actions">
-                      {order.shipping_status === 'delivered' && (
+                      {order.shipping_status === "delivered" && (
                         <button
                           className="review-btn"
                           onClick={() => setSelectedOrder(order)}
@@ -205,8 +288,12 @@ const Shipping = () => {
                             <option value="non_delivery">
                               Non-delivery/Failed Delivery
                             </option>
-                            <option value="wrong_product">Wrong Product Sent</option>
-                            <option value="damaged_product">Damaged Product</option>
+                            <option value="wrong_product">
+                              Wrong Product Sent
+                            </option>
+                            <option value="damaged_product">
+                              Damaged Product
+                            </option>
                             <option value="other">Other</option>
                           </select>
                         </div>
@@ -214,7 +301,9 @@ const Shipping = () => {
                           <label>Description:</label>
                           <textarea
                             value={reportDescription}
-                            onChange={(e) => setReportDescription(e.target.value)}
+                            onChange={(e) =>
+                              setReportDescription(e.target.value)
+                            }
                             placeholder="Please describe the issue in detail..."
                             rows="3"
                           />
@@ -236,7 +325,7 @@ const Shipping = () => {
           </div>
         )}
 
-        {activeTab === 'reviews' && (
+        {activeTab === "reviews" && (
           <div className="reviews-section">
             <h2>My Reviews</h2>
             {reviews.length === 0 ? (
@@ -247,15 +336,14 @@ const Shipping = () => {
                   <div key={review.id} className="review-card">
                     <div className="review-header">
                       <h3>{review.product_name}</h3>
-                      <div className="rating">
-                        {renderStars(review.rating)}
-                      </div>
+                      <div className="rating">{renderStars(review.rating)}</div>
                     </div>
                     {review.comment && (
                       <p className="review-comment">"{review.comment}"</p>
                     )}
                     <p className="review-date">
-                      Reviewed on {new Date(review.created_at).toLocaleDateString()}
+                      Reviewed on{" "}
+                      {new Date(review.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 ))}
@@ -270,8 +358,12 @@ const Shipping = () => {
         <div className="modal-overlay" onClick={() => setSelectedOrder(null)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <h2>Leave a Review</h2>
-            <p><strong>Product:</strong> {selectedOrder.product_name}</p>
-            <p><strong>Vendor:</strong> {selectedOrder.vendor_username}</p>
+            <p>
+              <strong>Product:</strong> {selectedOrder.product_name}
+            </p>
+            <p>
+              <strong>Vendor:</strong> {selectedOrder.vendor_username}
+            </p>
 
             <form onSubmit={handleReviewSubmit}>
               <div className="form-group">
@@ -281,8 +373,12 @@ const Shipping = () => {
                     <button
                       key={star}
                       type="button"
-                      className={`star-btn ${reviewForm.rating >= star ? 'filled' : ''}`}
-                      onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                      className={`star-btn ${
+                        reviewForm.rating >= star ? "filled" : ""
+                      }`}
+                      onClick={() =>
+                        setReviewForm({ ...reviewForm, rating: star })
+                      }
                     >
                       ★
                     </button>
@@ -294,7 +390,9 @@ const Shipping = () => {
                 <label>Comment (optional):</label>
                 <textarea
                   value={reviewForm.comment}
-                  onChange={(e) => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                  onChange={(e) =>
+                    setReviewForm({ ...reviewForm, comment: e.target.value })
+                  }
                   placeholder="Share your experience with this product..."
                   rows="4"
                 />

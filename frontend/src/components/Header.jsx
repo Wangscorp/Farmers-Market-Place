@@ -52,35 +52,50 @@ const Header = () => {
         )}
         {user ? (
           <>
-            <div className="user-profile">
-              {user.profile_image ? (
-                <img
-                  src={
-                    user.profile_image.startsWith("data:")
-                      ? user.profile_image
-                      : `data:image/jpeg;base64,${user.profile_image}`
-                  }
-                  alt={user.username}
-                  className="profile-image"
-                  title={user.username}
-                />
-              ) : (
-                <div className="profile-icon" title={user.username}>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+            <Link
+              to={
+                user.role === "Vendor"
+                  ? "/vendor"
+                  : user.role === "Admin"
+                  ? "/admin"
+                  : "/customer"
+              }
+              onClick={() => setMenuOpen(false)}
+              className="user-profile-link"
+            >
+              <div className="user-profile">
+                {user.profile_image ? (
+                  <img
+                    src={
+                      user.profile_image.startsWith("data:")
+                        ? user.profile_image
+                        : `data:image/jpeg;base64,${user.profile_image}`
+                    }
+                    alt={user.username}
+                    className="profile-image"
+                    title={`${user.username} - Go to Dashboard`}
+                  />
+                ) : (
+                  <div
+                    className="profile-icon"
+                    title={`${user.username} - Go to Dashboard`}
                   >
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="12" cy="7" r="4"></circle>
-                  </svg>
-                </div>
-              )}
-            </div>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                      <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                  </div>
+                )}
+              </div>
+            </Link>
             <span className="welcome-text">Welcome, {user.username}!</span>
             <button onClick={handleLogout} className="logout-btn">
               Logout
@@ -93,6 +108,11 @@ const Header = () => {
             {user.role === "Admin" && (
               <Link to="/admin" onClick={() => setMenuOpen(false)}>
                 Admin Dashboard
+              </Link>
+            )}
+            {user.role === "Customer" && (
+              <Link to="/customer" onClick={() => setMenuOpen(false)}>
+                Customer Dashboard
               </Link>
             )}
           </>

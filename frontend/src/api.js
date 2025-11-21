@@ -1,19 +1,12 @@
-/**
- * API configuration and HTTP client setup
- *
- * This module configures the Axios HTTP client for making API calls to the backend.
- * It provides a centralized place to set the base URL and any other default configurations.
- */
+// API client configuration with request/response interceptors for authentication.
 
 import axios from "axios";
 
-// Configure default base URL for all API requests
-// Uses environment variable VITE_API_URL if available, otherwise defaults to localhost
-// This allows the frontend to work in both development and production environments
+// Base URL from environment variable or localhost default
 axios.defaults.baseURL =
   import.meta.env.VITE_API_URL || "http://localhost:8080";
 
-// Interceptor to add JWT token to requests
+// Add JWT token to outgoing requests
 axios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -38,7 +31,7 @@ axios.interceptors.request.use(
   }
 );
 
-// Interceptor to handle responses and errors
+// Log responses and handle errors
 axios.interceptors.response.use(
   (response) => {
     console.log(
@@ -61,9 +54,22 @@ axios.interceptors.response.use(
         data: error.response?.data,
       }
     );
+
+    // Handle 401 Unauthorized errors
+    if (error.response?.status === 401) {
+      console.warn(
+        "[API] Unauthorized access - clearing token and redirecting to login"
+      );
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      // Only redirect if not already on auth page
+      if (!window.location.pathname.includes("/auth")) {
+        window.location.href = "/auth";
+      }
+    }
+
     return Promise.reject(error);
   }
 );
 
-// Export configured axios instance for use throughout the application
 export default axios;

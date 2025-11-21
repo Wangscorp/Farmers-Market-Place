@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import axios from "../api";
 import ImageUploadWithResize from "./ImageUploadWithResize";
 import VerificationUpload from "./VerificationUpload";
+import SalesReport from "./SalesReport";
 import { useUser } from "../hooks/useUser";
 import "./VendorDashboard.css";
 
@@ -23,11 +24,17 @@ const VendorDashboard = () => {
   const [reportCountLoaded, setReportCountLoaded] = useState(false);
   const [mpesaNumber, setMpesaNumber] = useState(user?.mpesa_number || "");
   const [showPhoneForm, setShowPhoneForm] = useState(false);
+  const [showSalesReport, setShowSalesReport] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawPhone, setWithdrawPhone] = useState("");
 
   useEffect(() => {
     if (user && user.role === "Vendor" && user.verified) {
       fetchReportCount();
       fetchProducts();
+      fetchWalletBalance();
     }
   }, [user]);
 
@@ -47,6 +54,53 @@ const VendorDashboard = () => {
       setReportCountLoaded(true);
     } catch (error) {
       console.error("Error fetching report count:", error);
+    }
+  };
+
+  const fetchWalletBalance = async () => {
+    try {
+      const response = await axios.get("/wallet/balance");
+      setWalletBalance(response.data.balance);
+    } catch (error) {
+      console.error("Error fetching wallet balance:", error);
+    }
+  };
+
+  const handleWithdrawSubmit = async (e) => {
+    e.preventDefault();
+
+    const amount = parseFloat(withdrawAmount);
+    if (isNaN(amount) || amount < 10) {
+      toast.error("Minimum withdrawal amount is KSh 10");
+      return;
+    }
+
+    if (amount > walletBalance) {
+      toast.error("Insufficient balance");
+      return;
+    }
+
+    if (!withdrawPhone.match(/^(254|0)\d{9}$/)) {
+      toast.error("Please enter a valid Kenyan phone number");
+      return;
+    }
+
+    try {
+      const response = await axios.post("/wallet/withdraw", {
+        amount,
+        mpesa_number: withdrawPhone.startsWith("0")
+          ? "254" + withdrawPhone.slice(1)
+          : withdrawPhone,
+      });
+
+      toast.success(response.data.message);
+      setShowWithdrawModal(false);
+      setWithdrawAmount("");
+      setWithdrawPhone("");
+      fetchWalletBalance();
+    } catch (error) {
+      console.error("Error withdrawing funds:", error);
+      toast.error(error.response?.data?.error || "Failed to withdraw funds");
     }
   };
 
@@ -228,7 +282,28 @@ const VendorDashboard = () => {
             ⚠ Your account is pending verification. Only verified vendors can
             manage products.
           </p>
-          <p>Please contact an administrator to verify your account.</p>
+          <p>
+            <strong>Verification Process:</strong> Admin must verify your
+            profile image to ensure it's a genuine human photo. This helps
+            maintain trust and security in the marketplace. You'll be notified
+            once your account is verified.
+          </p>
+          {user.profile_image && (
+            <div style={{ marginTop: "1rem" }}>
+              <p>Your submitted profile image is under review:</p>
+              <img
+                src={user.profile_image}
+                alt="Profile under review"
+                style={{
+                  maxWidth: "150px",
+                  maxHeight: "150px",
+                  borderRadius: "50%",
+                  border: "3px solid orange",
+                  marginTop: "0.5rem",
+                }}
+              />
+            </div>
+          )}
         </div>
       </div>
     );
@@ -257,6 +332,34 @@ const VendorDashboard = () => {
     <div className="vendor-dashboard">
       <div className="dashboard-header">
         <h2>Vendor Dashboard</h2>
+
+        {/* Wallet Section */}
+        <div className="wallet-card">
+          <div className="wallet-header">
+            <h3>💰 Wallet Balance</h3>
+            <div className="wallet-balance">
+              KSh{" "}
+              {walletBalance.toLocaleString("en-KE", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+          </div>
+          <button
+            className="withdraw-btn"
+            onClick={() => {
+              setWithdrawPhone(mpesaNumber || "");
+              setShowWithdrawModal(true);
+            }}
+            disabled={walletBalance < 10}
+          >
+            Withdraw to M-Pesa
+          </button>
+          {walletBalance < 10 && (
+            <p className="wallet-note">Minimum withdrawal: KSh 10</p>
+          )}
+        </div>
+
         <p
           className={`verification-status ${
             user?.verified ? "verified" : "unverified"
@@ -275,12 +378,20 @@ const VendorDashboard = () => {
           {showForm ? "Hide Form" : "+ Add New Product"}
         </button>
         <button
+          className="btn-analytics"
+          onClick={() => setShowSalesReport(!showSalesReport)}
+        >
+          {showSalesReport ? "Hide Sales Report" : "View Sales Report"}
+        </button>
+        <button
           className="btn-secondary"
           onClick={() => setShowPhoneForm(!showPhoneForm)}
         >
-          {showPhoneForm ? "Hide Phone Settings" : "📱 Update Phone Number"}
+          {showPhoneForm ? "Hide Phone Settings" : "Update Phone Number"}
         </button>
       </div>
+
+      {showSalesReport && <SalesReport />}
 
       {showPhoneForm && (
         <div className="phone-form-container">
@@ -494,6 +605,74 @@ const VendorDashboard = () => {
           </div>
         )}
       </div>
+
+      {/* Withdrawal Modal */}
+      {showWithdrawModal && (
+        <div
+          className="modal-overlay"
+          onClick={() => setShowWithdrawModal(false)}
+        >
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Withdraw to M-Pesa</h3>
+            <form onSubmit={handleWithdrawSubmit}>
+              <div className="form-group">
+                <label>Available Balance:</label>
+                <div className="balance-display">
+                  KSh{" "}
+                  {walletBalance.toLocaleString("en-KE", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="withdraw-amount">
+                  Amount to Withdraw (KSh):
+                </label>
+                <input
+                  id="withdraw-amount"
+                  type="number"
+                  min="10"
+                  max={walletBalance}
+                  step="0.01"
+                  value={withdrawAmount}
+                  onChange={(e) => setWithdrawAmount(e.target.value)}
+                  placeholder="Enter amount (minimum KSh 10)"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="withdraw-phone">M-Pesa Phone Number:</label>
+                <input
+                  id="withdraw-phone"
+                  type="text"
+                  value={withdrawPhone}
+                  onChange={(e) => setWithdrawPhone(e.target.value)}
+                  placeholder="254712345678 or 0712345678"
+                  pattern="(254|0)\d{9}"
+                  required
+                />
+                <small>Enter your M-Pesa registered phone number</small>
+              </div>
+
+              <div className="modal-actions">
+                <button type="submit" className="btn-primary">
+                  Confirm Withdrawal
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowWithdrawModal(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

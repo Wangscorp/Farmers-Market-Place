@@ -1,11 +1,4 @@
-/**
- * Authentication Debug Component
- *
- * Helps diagnose authentication issues by showing:
- * - Current user state
- * - Token presence and validity
- * - API connectivity
- */
+// Debug component: displays authentication state, token, and API connectivity.
 
 import { useState, useEffect } from "react";
 import { useUser } from "../hooks/useUser";
@@ -58,12 +51,12 @@ const AuthDebug = () => {
 
   return (
     <div style={{ padding: "20px", fontFamily: "monospace" }}>
-      <h2>🔍 Authentication Debug Info</h2>
+      <h2>Authentication Debug Info</h2>
 
       <div style={{ marginBottom: "20px" }}>
         <h3>Token Status:</h3>
         <p>
-          <strong>Has Token:</strong> {debugInfo.hasToken ? "✅ Yes" : "❌ No"}
+          <strong>Has Token:</strong> {debugInfo.hasToken ? "Yes" : "No"}
         </p>
         <p>
           <strong>Token Value:</strong> {debugInfo.tokenValue}
@@ -92,7 +85,7 @@ const AuthDebug = () => {
           <div>
             <p>
               <strong>Success:</strong>{" "}
-              {debugInfo.apiTest.success ? "✅ Yes" : "❌ No"}
+              {debugInfo.apiTest.success ? "Yes" : "No"}
             </p>
             {debugInfo.apiTest.status && (
               <p>

@@ -95,7 +95,9 @@ const AdminDashboard = () => {
       await axios.patch(`/api/admin/users/${userId}/verify`, {
         verified: approved,
       });
-      toast.success(approved ? "Vendor verified successfully!" : "Vendor rejected.");
+      toast.success(
+        approved ? "Vendor verified successfully!" : "Vendor rejected."
+      );
       fetchPendingVendors();
     } catch (err) {
       toast.success(
@@ -173,7 +175,12 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this user? This action cannot be undone."
+      )
+    )
+      return;
 
     try {
       await axios.delete(`/api/admin/users/${userId}`);
@@ -223,7 +230,9 @@ const AdminDashboard = () => {
           "Password reset successfully. User has been emailed their new password."
       );
     } catch (err) {
-      toast.error("Failed to reset password: " + (err.response?.data || err.message));
+      toast.error(
+        "Failed to reset password: " + (err.response?.data || err.message)
+      );
     }
   };
 
@@ -278,6 +287,7 @@ const AdminDashboard = () => {
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Profile</th>
                 <th>Username</th>
                 <th>Email</th>
                 <th>Role</th>
@@ -290,6 +300,46 @@ const AdminDashboard = () => {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td>{u.id}</td>
+                  <td>
+                    {u.profile_image ? (
+                      <img
+                        src={u.profile_image}
+                        alt={`${u.username} profile`}
+                        style={{
+                          width: "50px",
+                          height: "50px",
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          border:
+                            u.role === "Vendor" && !u.verified
+                              ? "2px solid orange"
+                              : "2px solid #ddd",
+                          cursor: "pointer",
+                        }}
+                        onClick={() => window.open(u.profile_image, "_blank")}
+                        title={
+                          u.role === "Vendor" && !u.verified
+                            ? "Click to verify this vendor profile image"
+                            : "Click to view full size"
+                        }
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "50px",
+                          height: "50px",
+                          borderRadius: "50%",
+                          background: "#ddd",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "20px",
+                        }}
+                      >
+                        {u.username.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </td>
                   <td>{u.username}</td>
                   <td>{u.email}</td>
                   <td>
@@ -310,7 +360,23 @@ const AdminDashboard = () => {
                       onChange={(e) =>
                         handleVerificationToggle(u.id, e.target.checked)
                       }
+                      title={
+                        u.role === "Vendor" && !u.verified
+                          ? "Check to verify vendor profile image"
+                          : ""
+                      }
                     />
+                    {u.role === "Vendor" && !u.verified && u.profile_image && (
+                      <span
+                        style={{
+                          color: "orange",
+                          fontSize: "12px",
+                          display: "block",
+                        }}
+                      >
+                        Needs verification
+                      </span>
+                    )}
                   </td>
                   <td>
                     <input
@@ -330,7 +396,6 @@ const AdminDashboard = () => {
                       </button>
                       <button
                         onClick={() => handleDeleteUser(u.id)}
-                        disabled={u.id === user.id} // Can't delete self
                         className="delete-btn"
                       >
                         Delete

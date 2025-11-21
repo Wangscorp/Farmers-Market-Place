@@ -1,45 +1,28 @@
-/**
- * User Provider - Global User State Management
- *
- * Provides React Context for managing authenticated user state across the application.
- * Implements authentication persistence using localStorage for browser sessions.
- * Centralizes user login, logout, and state access for all components.
- */
+// Global user state management with authentication persistence via localStorage.
 
 import { useState, useEffect } from "react";
 import { UserContext } from "./UserContext.js";
 
 export const UserProvider = ({ children }) => {
-  // User state - holds current user information or null
   const [user, setUser] = useState(null);
-  // Location state - holds current user location information
   const [location, setLocation] = useState(null);
   const [locationError, setLocationError] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
 
-  /**
-   * Login function - stores user data and token in state and localStorage
-   *
-   * Called after successful authentication API call to update global state.
-   * Persists user session and token across browser refreshes using localStorage.
-   *
-   * @param {Object} data - Response object with token and user data
-   */
+  // Store user data and token in state and localStorage after authentication
   const login = (data) => {
     console.log("[UserContext] Login called with data:", data);
 
     if (data.token) {
       console.log("[UserContext] Storing token in localStorage");
-      localStorage.setItem("token", data.token); // Store JWT token
+      localStorage.setItem("token", data.token);
     } else {
       console.warn("[UserContext] No token found in login response!");
     }
 
     const userData = data.user || data;
     console.log("[UserContext] Setting user state:", userData);
-    setUser(userData); // Update React state with user data
-
-    // Persist user session in localStorage for browser session management
+    setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
     console.log(
       "[UserContext] Login complete. Token stored:",
@@ -47,27 +30,14 @@ export const UserProvider = ({ children }) => {
     );
   };
 
-  /**
-   * Logout function - clears user state and removes session data
-   *
-   * Removes user from global state and localStorage.
-   * Called when user explicitly logs out or session becomes invalid.
-   */
+  // Clear user state and remove session data from localStorage
   const logout = () => {
-    setUser(null); // Clear React state
-    // Remove user session and token from localStorage
+    setUser(null);
     localStorage.removeItem("user");
     localStorage.removeItem("token");
   };
 
-  /**
-   * Request user location using Geolocation API
-   *
-   * Attempts to get the user's current geographic location.
-   * Updates location state and handles permission denials.
-   *
-   * @returns {Promise<Object>} Location data or error
-   */
+  // Request user's current geographic location via Geolocation API
   const requestLocation = () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -86,7 +56,7 @@ export const UserProvider = ({ children }) => {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
             accuracy: position.coords.accuracy,
-            timestamp: position.timestamp
+            timestamp: position.timestamp,
           };
 
           setLocation(locationData);
@@ -97,10 +67,12 @@ export const UserProvider = ({ children }) => {
           let errorMessage = "Unable to retrieve location";
           switch (error.code) {
             case error.PERMISSION_DENIED:
-              errorMessage = "Location access denied by user. Please enable location permissions or enter your location manually.";
+              errorMessage =
+                "Location access denied by user. Please enable location permissions or enter your location manually.";
               break;
             case error.POSITION_UNAVAILABLE:
-              errorMessage = "Location information unavailable. Please check your device settings.";
+              errorMessage =
+                "Location information unavailable. Please check your device settings.";
               break;
             case error.TIMEOUT:
               errorMessage = "Location request timed out. Please try again.";
@@ -114,7 +86,7 @@ export const UserProvider = ({ children }) => {
         {
           enableHighAccuracy: false, // Faster response, less accurate
           timeout: 15000, // 15 seconds
-          maximumAge: 300000 // Accept cached position up to 5 minutes old
+          maximumAge: 300000, // Accept cached position up to 5 minutes old
         }
       );
     });
@@ -140,13 +112,13 @@ export const UserProvider = ({ children }) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           latitude: locationData.latitude,
           longitude: locationData.longitude,
-          location_string: locationData.location_string || null
-        })
+          location_string: locationData.location_string || null,
+        }),
       });
 
       if (!response.ok) {
@@ -217,17 +189,19 @@ export const UserProvider = ({ children }) => {
 
   // Provide context values to consumer components
   return (
-    <UserContext.Provider value={{
-      user,
-      login,
-      logout,
-      location,
-      locationError,
-      locationLoading,
-      requestLocation,
-      updateUserLocation,
-      reverseGeocode
-    }}>
+    <UserContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        location,
+        locationError,
+        locationLoading,
+        requestLocation,
+        updateUserLocation,
+        reverseGeocode,
+      }}
+    >
       {children}
     </UserContext.Provider>
   );

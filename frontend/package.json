@@ -15,7 +15,8 @@
     "react-dom": "^19.1.1",
     "react-image-file-resizer": "^0.4.8",
     "react-router-dom": "^7.9.3",
-    "react-toastify": "^11.0.5"
+    "react-toastify": "^11.0.5",
+    "recharts": "^3.4.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

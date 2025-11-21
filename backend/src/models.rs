@@ -1,3 +1,6 @@
+//! Data models and JWT utilities for the marketplace.
+//! Defines structures for products, users, carts, messages, and authentication.
+
 use serde::{Deserialize, Serialize};
 use jsonwebtoken::{encode, decode, Header, Validation, EncodingKey, DecodingKey, errors::Error};
 use chrono::{Utc, Duration};
@@ -27,9 +30,8 @@ pub struct User {
     pub secondary_email: Option<String>,
     pub mpesa_number: Option<String>,
     pub payment_preference: Option<String>,
-    pub latitude: Option<f64>, // User's location for product filtering
-    pub longitude: Option<f64>, // User's location for product filtering
     pub location_string: Option<String>, // Human-readable location (city, country)
+    pub wallet_balance: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -52,8 +54,6 @@ pub struct SignupRequest {
     pub password: String,
     pub role: Option<String>, // "Customer" or "Vendor", defaults to "Customer"
     pub profile_image: Option<String>, // Base64 encoded image
-    pub latitude: Option<f64>,
-    pub longitude: Option<f64>,
     pub location_string: Option<String>,
 }
 
@@ -192,6 +192,9 @@ pub struct ShippingOrder {
     pub customer_username: String,
     pub vendor_username: String,
     pub product_name: String,
+    pub customer_verified: bool,
+    pub payment_released: bool,
+    pub verification_requested_at: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -212,6 +215,26 @@ pub struct CreateShippingOrderRequest {
 pub struct UpdateShippingStatusRequest {
     pub shipping_status: String,
     pub tracking_number: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VerifyDeliveryRequest {
+    pub order_id: i32,
+    pub verified: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WithdrawRequest {
+    pub amount: f64,
+    pub mpesa_number: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct WithdrawResponse {
+    pub success: bool,
+    pub message: String,
+    pub transaction_id: Option<String>,
+    pub new_balance: f64,
 }
 
 // JWT utilities
@@ -258,11 +281,49 @@ pub struct PaymentTransaction {
     pub amount: f64,
     pub status: String, // initiated, completed, failed, cancelled
     pub transaction_date: Option<String>,
+    pub cart_item_ids: Option<String>, // Comma-separated cart item IDs
     pub created_at: String,
     pub updated_at: String,
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VendorSalesReport {
+    pub total_sales: f64,
+    pub total_orders: i32,
+    pub total_profit: f64, // Assuming profit = total_sales for now
+    pub sales_by_product: Vec<ProductSales>,
+}
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct ProductSales {
+    pub product_id: i32,
+    pub product_name: String,
+    pub quantity_sold: i32,
+    pub total_revenue: f64,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CustomerPurchaseReport {
+    pub total_spent: f64,
+    pub total_orders: i32,
+    pub purchases_by_category: Vec<CategoryPurchase>,
+    pub purchases_by_vendor: Vec<VendorPurchase>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct CategoryPurchase {
+    pub category: String,
+    pub total_spent: f64,
+    pub quantity: i32,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VendorPurchase {
+    pub vendor_id: i32,
+    pub vendor_name: String,
+    pub total_spent: f64,
+    pub order_count: i32,
+}
 
 pub fn create_jwt(user: &User) -> Result<String, Error> {
     let claims = Claims::new(user);

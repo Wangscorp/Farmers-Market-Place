@@ -90,7 +90,7 @@ const VerificationUpload = () => {
               </div>
 
               {errorMessage && (
-                <div className="error-message">❌ {errorMessage}</div>
+                <div className="error-message">{errorMessage}</div>
               )}
 
               {successMessage && (

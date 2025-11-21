@@ -17,12 +17,22 @@ export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Load cart items when component mounts
+  // Load cart items when component mounts, but only if token exists
   useEffect(() => {
-    loadCartItems();
+    const token = localStorage.getItem("token");
+    if (token) {
+      loadCartItems();
+    }
   }, []);
 
   const loadCartItems = async () => {
+    // Check if token exists before loading
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setCartItems([]);
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await axios.get("/cart");
@@ -30,6 +40,7 @@ export const CartProvider = ({ children }) => {
     } catch (error) {
       console.error("Error loading cart:", error);
       // For now, keep empty cart on error
+      setCartItems([]);
     } finally {
       setLoading(false);
     }

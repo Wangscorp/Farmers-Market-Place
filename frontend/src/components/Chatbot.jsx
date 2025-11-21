@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useUser } from "../hooks/useUser";
 import axios from "../api";
 import "./Chatbot.css";
@@ -68,13 +69,13 @@ const Chatbot = () => {
         return (
           <div>
             <p>No products available at the moment. Please check back later!</p>
-            <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li>
-                <a href="#/products" className="chatbot-link">
-                  Browse Products
-                </a>
-              </li>
-            </ul>
+              <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                <li>
+                  <Link to="/products" className="chatbot-link">
+                    Browse Products
+                  </Link>
+                </li>
+              </ul>
           </div>
         );
       }
@@ -130,9 +131,9 @@ const Chatbot = () => {
             )
           )}
           <p style={{ marginTop: "12px" }}>
-            <a href="#/products" className="chatbot-link">
+            <Link to="/products" className="chatbot-link">
               Browse all products →
-            </a>
+            </Link>
           </p>
         </div>
       );
@@ -175,11 +176,11 @@ const Chatbot = () => {
               browse all products:
             </p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li>
-                <a href="#/products" className="chatbot-link">
-                  Browse All Products
-                </a>
-              </li>
+            <li>
+              <Link to="/products" className="chatbot-link">
+                Browse All Products
+              </Link>
+            </li>
             </ul>
           </div>
         );
@@ -265,8 +266,8 @@ const Chatbot = () => {
             <div>
               <p>To get the most out of our platform, please sign in or create an account:</p>
               <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                <li><a href="#/auth?mode=login" className="chatbot-link">Sign In</a> to existing account</li>
-                <li><a href="#/auth?mode=signup" className="chatbot-link">Sign Up</a> for new account</li>
+                <li><Link to="/auth?mode=login" className="chatbot-link">Sign In</Link> to existing account</li>
+                <li><Link to="/auth?mode=signup" className="chatbot-link">Sign Up</Link> for new account</li>
               </ul>
             </div>
           ) : (

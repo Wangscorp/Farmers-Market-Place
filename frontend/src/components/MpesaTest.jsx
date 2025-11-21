@@ -1,10 +1,4 @@
-/**
- * M-Pesa STK Push Test Component
- *
- * This component demonstrates the complete M-Pesa STK Push implementation.
- * When a user enters their phone number and clicks "Pay Now", it initiates
- * an STK Push request that appears on their phone for payment confirmation.
- */
+// M-Pesa STK Push demo: initiates payment request to user's phone.
 
 import { useState } from "react";
 import { toast } from "react-toastify";
@@ -63,7 +57,7 @@ const MpesaTest = () => {
       const result = await response.json();
 
       if (response.ok) {
-        console.log("✅ STK Push initiated:", result);
+        console.log("STK Push initiated:", result);
 
         setLastTransaction({
           id: result.transaction_id,
@@ -76,16 +70,16 @@ const MpesaTest = () => {
 
         // Show success message
         toast.success(
-          `🎉 M-Pesa STK Push Sent!\n\n` +
-            `📱 Check your phone (${phoneNumber}) for the M-Pesa prompt\n` +
-            `💰 Amount: KSh ${amount}\n` +
-            `🆔 Transaction ID: ${result.transaction_id}\n\n` +
-            `⏰ You have 60 seconds to enter your M-Pesa PIN`
+          `M-Pesa STK Push Sent!\n\n` +
+            `Check your phone (${phoneNumber}) for the M-Pesa prompt\n` +
+            `Amount: KSh ${amount}\n` +
+            `Transaction ID: ${result.transaction_id}\n\n` +
+            `You have 60 seconds to enter your M-Pesa PIN`
         );
       } else {
-        console.error("❌ STK Push failed:", result);
+        console.error("STK Push failed:", result);
         toast.error(
-          `❌ Payment Failed\n\n${
+          `Payment Failed\n\n${
             result.message || result.error
           }\n\nPlease try again.`
         );
@@ -93,7 +87,7 @@ const MpesaTest = () => {
     } catch (error) {
       console.error("STK Push error:", error);
       toast.error(
-        "❌ Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
+        "Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
       );
     } finally {
       setLoading(false);
@@ -167,7 +161,7 @@ const MpesaTest = () => {
               Sending STK Push...
             </>
           ) : (
-            <>📱 Send STK Push (KSh {amount})</>
+            <>Send STK Push (KSh {amount})</>
           )}
         </button>
       </div>

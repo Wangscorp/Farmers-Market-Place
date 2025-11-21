@@ -15,33 +15,30 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [locationBasedShopping, setLocationBasedShopping] = useState(() => {
     // Load preference from localStorage, default to true
-    return localStorage.getItem('locationBasedShopping') !== 'false';
+    return localStorage.getItem("locationBasedShopping") !== "false";
   });
 
   // Function to toggle location-based shopping
   const toggleLocationBasedShopping = () => {
     const newValue = !locationBasedShopping;
     setLocationBasedShopping(newValue);
-    localStorage.setItem('locationBasedShopping', newValue.toString());
+    localStorage.setItem("locationBasedShopping", newValue.toString());
     // Refetch products with the new preference
     fetchProducts();
   };
 
   const fetchProducts = async () => {
     try {
-      // Determine URL based on location-based shopping preference
       let url = "/products";
       const params = [];
 
-      // Only include location parameters if location-based shopping is enabled and location is available
-      if (locationBasedShopping && location) {
-        params.push(`lat=${encodeURIComponent(location.latitude)}`);
-        params.push(`lng=${encodeURIComponent(location.longitude)}`);
-        params.push(`max_distance=50`);
+      // Filter by user's text location if enabled and available
+      if (locationBasedShopping && user?.location_string) {
+        params.push(`location=${encodeURIComponent(user.location_string)}`);
       }
 
       if (params.length > 0) {
-        url += `?${params.join('&')}`;
+        url += `?${params.join("&")}`;
       }
 
       const response = await axios.get(url);
@@ -51,11 +48,10 @@ const Products = () => {
     }
   };
 
-  const [chatUser, setChatUser] = useState(null); // {id, username} for chat
-  const [quantities, setQuantities] = useState({}); // Store quantity for each product
+  const [chatUser, setChatUser] = useState(null);
+  const [quantities, setQuantities] = useState({});
   const { addToCart } = useCart();
   const { user } = useUser();
-  const { location, locationError, locationLoading, requestLocation } = useContext(UserContext);
 
   // Define category mappings
   const categoryMapping = {
@@ -96,7 +92,7 @@ const Products = () => {
 
   useEffect(() => {
     fetchProducts();
-  }, [location, locationBasedShopping]); // Refetch when location or preference changes
+  }, [user, locationBasedShopping]); // Refetch when user or preference changes
 
   const getFilteredProducts = () => {
     if (selectedCategory === "All") {
@@ -175,78 +171,40 @@ const Products = () => {
     }
   };
 
-  const handleEnableLocation = async () => {
-    try {
-      await requestLocation();
-      toast.success("Location enabled! Products will now be filtered by your location.");
-    } catch {
-      toast.error("Unable to access location. Please check your browser permissions.");
-    }
-  };
-
   return (
     <div>
       <h2>Available Products</h2>
 
-      {/* Location Status */}
-      <div className="location-status">
-        {location ? (
-          <div className="location-enabled">
-            <span className="location-icon">📍</span>
-            <span>Location-based filtering enabled</span>
-          </div>
-        ) : locationLoading ? (
-          <div className="location-loading">
-            <span>Loading location...</span>
-          </div>
-        ) : locationError ? (
-          <div className="location-disabled">
-            <span className="location-icon">⚠️</span>
-            <span>Location not available. </span>
-            <button onClick={handleEnableLocation} className="enable-location-btn">
-              Enable Location
-            </button>
-          </div>
-        ) : (
-          <div className="location-prompt">
-            <span className="location-icon">📍</span>
-            <span>Enable location to see products near you. </span>
-            <button onClick={handleEnableLocation} className="enable-location-btn">
-              Enable Location
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* Shopping Mode Toggle */}
       <div className="shopping-mode-toggle">
         <div className="toggle-container">
-          <label className="toggle-label">
-            Shopping Mode:
-          </label>
+          <label className="toggle-label">Shopping Mode:</label>
           <div className="toggle-buttons">
             <button
-              className={`toggle-btn ${locationBasedShopping ? 'active' : ''}`}
+              className={`toggle-btn ${locationBasedShopping ? "active" : ""}`}
               onClick={toggleLocationBasedShopping}
-              disabled={!location} // Disabled if no location available
-              title={location ? "Find products from nearby vendors (within 50km)" : "Location not available"}
+              disabled={!user?.location_string}
+              title={
+                user?.location_string
+                  ? `Show vendors from ${user.location_string}`
+                  : "Set your location in profile to filter by area"
+              }
             >
-              <span className="toggle-icon">📍</span>
-              Local Shops
+              My Area ({user?.location_string || "Not set"})
             </button>
             <button
-              className={`toggle-btn ${!locationBasedShopping ? 'active' : ''}`}
+              className={`toggle-btn ${!locationBasedShopping ? "active" : ""}`}
               onClick={toggleLocationBasedShopping}
             >
-              <span className="toggle-icon">🌎</span>
               All Shops
             </button>
           </div>
           <p className="toggle-description">
             {locationBasedShopping
-              ? "Browse products from vendors within your area"
-              : "Browse products from all vendors nationwide"
-            }
+              ? user?.location_string
+                ? `Showing products from vendors in ${user.location_string}`
+                : "Please set your location in your profile to filter products"
+              : "Browsing products from all vendors nationwide"}
           </p>
         </div>
       </div>

@@ -129,6 +129,14 @@ nav a.active::after {
   font-size: 0.95rem;
 }
 
+/* User Profile Link */
+.user-profile-link {
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* User Profile Icon */
 .user-profile {
   display: flex;
@@ -143,11 +151,12 @@ nav a.active::after {
   object-fit: cover;
   border: 2px solid var(--primary-color);
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
 .profile-image:hover {
   transform: scale(1.1);
+  border-color: var(--secondary-color);
 }
 
 .profile-icon {

@@ -1,17 +1,6 @@
-/**
- * M-Pesa Daraja API Integration Module
- * 
- * This module handles integration with Safaricom's M-Pesa Daraja API for:
- * - STK Push (Customer pays merchant)
- * - Transaction status queries
- * - Payment callbacks handling
- * 
- * For production use:
- * 1. Register your app on https://developer.safaricom.co.ke/
- * 2. Get Consumer Key and Consumer Secret
- * 3. Set up callback URL (must be publicly accessible)
- * 4. Configure shortcode and passkey
- */
+//! M-Pesa Daraja API integration for STK Push and payment callbacks.
+//! Configure via environment variables: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, etc.
+//! For production, register at https://developer.safaricom.co.ke/
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};

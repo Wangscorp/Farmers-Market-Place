@@ -1,0 +1,138 @@
+.sales-report {
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sales-report h2 {
+  color: #2c3e50;
+  margin-bottom: 2rem;
+  font-size: 2rem;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 3rem;
+}
+
+.summary-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.summary-card:hover {
+  transform: translateY(-5px);
+}
+
+.summary-card h3 {
+  font-size: 1rem;
+  margin-bottom: 1rem;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.summary-card .amount {
+  font-size: 2rem;
+  font-weight: bold;
+  margin: 0;
+}
+
+.summary-card .count {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin: 0;
+}
+
+.chart-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.chart-section h3 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+}
+
+.product-list {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.product-list h3 {
+  color: #2c3e50;
+  margin-bottom: 1.5rem;
+  font-size: 1.3rem;
+}
+
+.product-list table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.product-list thead {
+  background-color: #f8f9fa;
+}
+
+.product-list th,
+.product-list td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.product-list th {
+  font-weight: 600;
+  color: #495057;
+}
+
+.product-list tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.no-data {
+  background: white;
+  padding: 3rem;
+  border-radius: 12px;
+  text-align: center;
+  color: #6c757d;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.no-data p {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .sales-report {
+    padding: 1rem;
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-section {
+    padding: 1rem;
+  }
+
+  .product-list {
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  .product-list table {
+    min-width: 500px;
+  }
+}

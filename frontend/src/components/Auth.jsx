@@ -1,49 +1,33 @@
-/**
- * Authentication Component - Login and Signup Forms
- *
- * Provides user interface for user authentication and registration.
- * Handles login for existing users and signup for new users.
- * Supports different user roles (Customer, Vendor) and profile image upload during signup.
- */
+// Authentication: login and signup forms with role selection and image upload.
 
-import { useState, useContext, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import axios from "../api"; // Configured axios instance with base URL
 import { useUser } from "../hooks/useUser"; // React context for user state management
+import { useCart } from "./CartContext"; // Cart context to load cart after login
 import ImageUploadWithResize from "./ImageUploadWithResize"; // Image compression component
-import { UserContext } from "./UserContext"; // User context for location functionality
 import "./Auth.css";
 
 const Auth = () => {
   // Hook from UserContext to update global user state
   const { login } = useUser();
+  const { loadCartItems } = useCart();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Location context for geolocation functionality
-  const { location, locationError, locationLoading, requestLocation } = useContext(UserContext);
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState("Customer");
+  const [resizedImage, setResizedImage] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [location, setLocation] = useState("");
+  const [passwordErrors, setPasswordErrors] = useState([]);
 
-  // Form state management
-  const [isLogin, setIsLogin] = useState(true); // Toggle between login/signup mode
-  const [username, setUsername] = useState(""); // Username input
-  const [email, setEmail] = useState(""); // Email input (signup only)
-  const [password, setPassword] = useState(""); // Password input
-  const [confirmPassword, setConfirmPassword] = useState(""); // Password confirmation (signup only)
-  const [role, setRole] = useState("Customer"); // User role selection (signup only)
-  const [resizedImage, setResizedImage] = useState(null); // Profile image data
-  const [showPassword, setShowPassword] = useState(false); // Toggle password visibility
-
-  // Location state for signup
-  const [manualLocation, setManualLocation] = useState(""); // Manual location text input
-  const [useCurrentLocation, setUseCurrentLocation] = useState(true); // Toggle between current/manual location
-
-  /**
-   * Handle user login attempt
-   *
-   * Sends username and password to backend API and updates user context on success.
-   * Shows alert for success/failure feedback.
-   */
+  // Submit login request and update user context on success
   const handleLogin = async () => {
     try {
       console.log("[Auth] Attempting login with username:", username);
@@ -54,38 +38,49 @@ const Auth = () => {
       console.log("[Auth] Login response:", response.data);
       // Update global user state with returned user data
       login(response.data);
+      // Load cart items after successful login
+      await loadCartItems();
       toast.success("Login successful!");
       navigate("/");
     } catch (error) {
       console.error("[Auth] Login failed:", error);
-      toast.error("Login failed: " + (error.response?.data || "Please try again"));
+      toast.error(
+        "Login failed: " + (error.response?.data || "Please try again")
+      );
     }
   };
 
-  /**
-   * Handle location request
-   *
-   * Attempts to get the user's current location using geolocation API.
-   */
-  const handleRequestLocation = async () => {
-    try {
-      await requestLocation();
-      toast.success("Location acquired successfully!");
-    } catch (error) {
-      console.error("Location request failed:", error);
-      toast.error("Could not get location. Please enter your location manually.");
+  // Validate password: min 8 chars, uppercase, lowercase, number, special char
+  const validatePassword = (pwd) => {
+    const errors = [];
+    if (pwd.length < 8) errors.push("At least 8 characters");
+    if (!/[A-Z]/.test(pwd)) errors.push("At least one uppercase letter");
+    if (!/[a-z]/.test(pwd)) errors.push("At least one lowercase letter");
+    if (!/[0-9]/.test(pwd)) errors.push("At least one number");
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd))
+      errors.push("At least one special character (!@#$%^&*...)");
+    return errors;
+  };
+
+  const handlePasswordChange = (e) => {
+    const pwd = e.target.value;
+    setPassword(pwd);
+    if (pwd && !isLogin) {
+      setPasswordErrors(validatePassword(pwd));
+    } else {
+      setPasswordErrors([]);
     }
   };
 
-  /**
-   * Handle user signup attempt
-   *
-   * Validates password confirmation, sends user data to backend, and updates user context.
-   * Handles signup errors like duplicate usernames/emails.
-   * Profile image is required for vendors for verification.
-   * Includes location data (either from geolocation or manual input).
-   */
+  // Submit signup request after validating password and location
   const handleSignup = async () => {
+    const pwdErrors = validatePassword(password);
+    if (pwdErrors.length > 0) {
+      setPasswordErrors(pwdErrors);
+      toast.error("Password does not meet requirements");
+      return;
+    }
+
     // Client-side validation before API call
     if (password !== confirmPassword) {
       toast.warning("Passwords do not match");
@@ -93,32 +88,9 @@ const Auth = () => {
     }
 
     // Validate location input
-    if (useCurrentLocation && !location) {
-      toast.warning("Please acquire your location or switch to manual entry");
+    if (!location.trim()) {
+      toast.warning("Please enter your location");
       return;
-    }
-
-    if (!useCurrentLocation && !manualLocation.trim()) {
-      toast.warning("Please enter your location manually");
-      return;
-    }
-
-    // Profile image is no longer required for signup
-
-    // Prepare location data
-    let locationData = null;
-    if (useCurrentLocation && location) {
-      locationData = {
-        latitude: location.latitude,
-        longitude: location.longitude,
-        location_string: null // Will be reverse geocoded later if needed
-      };
-    } else if (!useCurrentLocation && manualLocation.trim()) {
-      locationData = {
-        latitude: null,
-        longitude: null,
-        location_string: manualLocation.trim()
-      };
     }
 
     try {
@@ -127,14 +99,14 @@ const Auth = () => {
         email,
         password,
         role,
-        profile_image: resizedImage, // Base64 encoded resized image
-        latitude: locationData?.latitude,
-        longitude: locationData?.longitude,
-        location_string: locationData?.location_string
+        profile_image: resizedImage,
+        location_string: location.trim(),
       };
 
       const response = await axios.post("/signup", signupData);
       login(response.data);
+      // Load cart items after successful signup (will be empty for new users)
+      await loadCartItems();
       toast.success("Signup successful!");
 
       // For vendors, redirect to setup page instead of home
@@ -144,7 +116,9 @@ const Auth = () => {
         navigate("/");
       }
     } catch (error) {
-      toast.error("Signup failed: " + (error.response?.data || "Please try again"));
+      toast.error(
+        "Signup failed: " + (error.response?.data || "Please try again")
+      );
     }
   };
 
@@ -212,8 +186,34 @@ const Auth = () => {
         type={showPassword ? "text" : "password"}
         placeholder="Password"
         value={password}
-        onChange={(e) => setPassword(e.target.value)}
+        onChange={handlePasswordChange}
       />
+      {!isLogin && passwordErrors.length > 0 && (
+        <div className="password-requirements">
+          <p
+            style={{
+              margin: "0.5rem 0",
+              fontWeight: "600",
+              fontSize: "0.9rem",
+              color: "#dc3545",
+            }}
+          >
+            Password must have:
+          </p>
+          <ul
+            style={{
+              margin: "0 0 0.5rem 0",
+              paddingLeft: "1.5rem",
+              fontSize: "0.85rem",
+              color: "#dc3545",
+            }}
+          >
+            {passwordErrors.map((err, idx) => (
+              <li key={idx}>{err}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {!isLogin && (
         <>
           <input
@@ -227,76 +227,13 @@ const Auth = () => {
             <option value="Vendor">Vendor</option>
           </select>
 
-          {/* Location Input Section */}
-          <div className="location-input-section">
-            <h4>Location Information</h4>
-            <div className="location-options">
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="locationType"
-                  checked={useCurrentLocation}
-                  onChange={() => setUseCurrentLocation(true)}
-                />
-                Use Current Location
-              </label>
-              <label className="radio-option">
-                <input
-                  type="radio"
-                  name="locationType"
-                  checked={!useCurrentLocation}
-                  onChange={() => setUseCurrentLocation(false)}
-                />
-                Enter Location Manually
-              </label>
-            </div>
-
-            {useCurrentLocation ? (
-              <div className="location-current">
-                <button
-                  type="button"
-                  onClick={handleRequestLocation}
-                  disabled={locationLoading}
-                  className="location-btn"
-                >
-                  {locationLoading ? "Getting Location..." : "📍 Get My Location"}
-                </button>
-
-                {location && (
-                  <div className="location-status success">
-                    ✅ Location acquired: Lat {location.latitude.toFixed(4)}, Lng {location.longitude.toFixed(4)}
-                  </div>
-                )}
-
-                {locationError && !location && (
-                  <div className="location-status error">
-                    ❌ {locationError}
-                  </div>
-                )}
-
-                {!locationLoading && !location && !locationError && (
-                  <div className="location-status info">
-                    ℹ️ Click "Get My Location" to automatically detect your position
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="location-manual">
-                <input
-                  type="text"
-                  placeholder="Enter your city or location (e.g., Nairobi, Kenya)"
-                  value={manualLocation}
-                  onChange={(e) => setManualLocation(e.target.value)}
-                  className="location-input"
-                />
-                {!manualLocation.trim() && (
-                  <div className="location-status info">
-                    ℹ️ Please enter your location to help us show relevant products
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <input
+            type="text"
+            placeholder="Enter your location (e.g., Nairobi, Kenya)"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            style={{ marginTop: "0.5rem" }}
+          />
 
           <ImageUploadWithResize onImageResize={handleImageResize} />
         </>

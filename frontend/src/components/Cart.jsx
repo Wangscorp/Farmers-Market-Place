@@ -107,7 +107,7 @@ const Cart = () => {
         return;
       }
 
-      console.log("💰 Checkout details:", {
+      console.log("Checkout details:", {
         selectedItems: selectedItemIds,
         totalAmount: totalAmount,
         cartItems: cartItems.length,
@@ -124,7 +124,7 @@ const Cart = () => {
         selected_items: selectedItemIds,
       };
 
-      console.log("🔄 Initiating M-Pesa payment...", requestPayload);
+      console.log("Initiating M-Pesa payment...", requestPayload);
 
       const response = await fetch("http://localhost:8080/checkout", {
         method: "POST",
@@ -138,15 +138,15 @@ const Cart = () => {
       const result = await response.json();
 
       if (response.ok) {
-        console.log("✅ Payment initiated:", result);
+        console.log("Payment initiated:", result);
 
         // Show success message with clear instructions
         toast.success(
-          `🎉 M-Pesa Payment Initiated!\n\n` +
-            `📱 Check your phone (${mpesaNumber}) for the M-Pesa prompt\n` +
-            `💰 Amount: KSh ${totalAmount.toLocaleString()}\n` +
-            `🆔 Transaction ID: ${result.transaction_id}\n\n` +
-            `⏰ You have 60 seconds to complete the payment`
+          `M-Pesa Payment Initiated!\n\n` +
+            `Check your phone (${mpesaNumber}) for the M-Pesa prompt\n` +
+            `Amount: KSh ${totalAmount.toLocaleString()}\n` +
+            `Transaction ID: ${result.transaction_id}\n\n` +
+            `You have 60 seconds to complete the payment`
         );
 
         // Clear form after successful initiation
@@ -157,16 +157,16 @@ const Cart = () => {
           window.location.reload();
         }, 2000);
       } else {
-        console.error("❌ Payment failed:", result);
+        console.error("Payment failed:", result);
 
         // Show specific error message from backend
         const errorMsg = result.message || result.error || "Payment failed";
-        toast.error(`❌ Payment Failed\n\n${errorMsg}\n\nPlease try again.`);
+        toast.error(`Payment Failed\n\n${errorMsg}\n\nPlease try again.`);
       }
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error(
-        "❌ Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
+        "Network Error\n\nUnable to connect to payment service.\nPlease check your internet connection and try again."
       );
     } finally {
       // Reset button state

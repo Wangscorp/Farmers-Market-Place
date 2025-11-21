@@ -1,3 +1,5 @@
+// Main application routing and layout
+
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -11,6 +13,7 @@ import VendorProfileView from "./components/VendorProfileView";
 import VendorDashboard from "./components/VendorDashboard";
 import VendorSetup from "./components/VendorSetup";
 import AdminDashboard from "./components/AdminDashboard";
+import CustomerDashboard from "./components/CustomerDashboard";
 import Shipping from "./components/Shipping";
 import Conversations from "./components/Conversations";
 import Chatbot from "./components/Chatbot";
@@ -47,6 +50,7 @@ function App() {
               element={<VendorProfileView />}
             />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/customer" element={<CustomerDashboard />} />
             <Route path="/mpesa-test" element={<MpesaTest />} />
             <Route path="/auth-debug" element={<AuthDebug />} />
           </Routes>
