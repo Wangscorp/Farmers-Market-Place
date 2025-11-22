@@ -639,6 +639,37 @@ async fn get_all_users(
     }
 }
 
+/// GET /users - Get all users for messaging (public, but requires authentication)
+#[get("/users")]
+async fn get_all_users_for_messaging(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>
+) -> ActixResult<HttpResponse> {
+    // Verify user is authenticated
+    let current_user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::get_all_users(&pool).await {
+        Ok(users) => {
+            // Filter out the current user and return
+            let filtered_users: Vec<_> = users
+                .into_iter()
+                .filter(|u| u.id != current_user_id)
+                .map(|u| serde_json::json!({
+                    "id": u.id,
+                    "username": u.username,
+                    "email": u.email,
+                    "profile_image": u.profile_image,
+                }))
+                .collect();
+            Ok(HttpResponse::Ok().json(filtered_users))
+        },
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch users")),
+    }
+}
+
 #[get("/api/admin/pending-vendors")]
 async fn get_pending_vendors(
     req: actix_web::HttpRequest,
@@ -2394,6 +2425,9 @@ pub fn init(cfg: &mut web::ServiceConfig) {
 
     // Vendor report count route
     cfg.service(get_vendor_report_count);
+
+    // Public messaging route
+    cfg.service(get_all_users_for_messaging);
 
     // Admin routes - authentication checked in route handlers
     cfg.service(get_all_users)

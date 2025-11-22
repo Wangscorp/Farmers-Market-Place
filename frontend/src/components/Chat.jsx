@@ -1,25 +1,15 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
-import axios from '../api';
-import { useUser } from '../hooks/useUser';
-import './Chat.css';
+import axios from "../api";
+import { useUser } from "../hooks/useUser";
+import "./Chat.css";
 
-const Chat = ({ otherUserId, otherUsername, onClose }) => {
+const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
   const { user } = useUser();
-
-  useEffect(() => {
-    if (otherUserId) {
-      loadMessages();
-    }
-  }, [otherUserId, loadMessages]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   const loadMessages = useCallback(async () => {
     if (!otherUserId) return;
@@ -32,11 +22,25 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
       // Mark messages as read
       await axios.patch(`/messages/${otherUserId}/read`);
     } catch (error) {
-      console.error('Error loading messages:', error);
+      console.error("Error loading messages:", error);
     } finally {
       setLoading(false);
     }
   }, [otherUserId]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (otherUserId) {
+      loadMessages();
+    }
+  }, [otherUserId, loadMessages]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const sendMessage = async (e) => {
     e.preventDefault();
@@ -44,26 +48,52 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
     if (!newMessage.trim() || !otherUserId) return;
 
     try {
-      const response = await axios.post('/messages', {
+      const response = await axios.post("/messages", {
         receiver_id: otherUserId,
-        content: newMessage.trim()
+        content: newMessage.trim(),
       });
 
-      setMessages(prev => [...prev, response.data]);
-      setNewMessage('');
+      setMessages((prev) => [...prev, response.data]);
+      setNewMessage("");
+
+      // Notify parent component that a message was sent
+      if (onMessageSent) {
+        onMessageSent();
+      }
     } catch (error) {
-      console.error('Error sending message:', error);
-      toast.error('Failed to send message');
+      console.error("Error sending message:", error);
+      toast.error("Failed to send message");
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   const formatTime = (timestamp) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (!timestamp) {
+      return new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+    try {
+      // Handle ISO 8601 format and other common formats
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) {
+        // If the date is invalid, use current time
+        return new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (error) {
+      console.error("Error formatting time:", timestamp, error);
+      return new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
   };
 
   if (!user) {
@@ -71,7 +101,9 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
       <div className="chat-container">
         <div className="chat-header">
           <h3>Please log in to use chat</h3>
-          <button onClick={onClose} className="close-btn">×</button>
+          <button onClick={onClose} className="close-btn">
+            ×
+          </button>
         </div>
       </div>
     );
@@ -81,19 +113,25 @@ const Chat = ({ otherUserId, otherUsername, onClose }) => {
     <div className="chat-container">
       <div className="chat-header">
         <h3>Chat with {otherUsername}</h3>
-        <button onClick={onClose} className="close-btn">×</button>
+        <button onClick={onClose} className="close-btn">
+          ×
+        </button>
       </div>
 
       <div className="messages-container">
         {loading ? (
           <div className="loading">Loading messages...</div>
         ) : messages.length === 0 ? (
-          <div className="no-messages">No messages yet. Start the conversation!</div>
+          <div className="no-messages">
+            No messages yet. Start the conversation!
+          </div>
         ) : (
           messages.map((message) => (
             <div
               key={message.id}
-              className={`message ${message.sender_id === user.id ? 'sent' : 'received'}`}
+              className={`message ${
+                message.sender_id === user.id ? "sent" : "received"
+              }`}
             >
               <div className="message-content">
                 <p>{message.content}</p>

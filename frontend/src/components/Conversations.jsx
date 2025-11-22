@@ -7,25 +7,46 @@ import "./Conversations.css";
 const Conversations = () => {
   const { user } = useUser();
   const [conversations, setConversations] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showAvailableUsers, setShowAvailableUsers] = useState(false);
 
   useEffect(() => {
     if (user) {
       loadConversations();
+      loadAvailableUsers();
     }
   }, [user]);
 
   const loadConversations = async () => {
     try {
       setLoading(true);
-      const response = await axios.get("/conversations");
+      const response = await axios.get("/messages");
       setConversations(response.data || []);
     } catch (error) {
       console.error("Error loading conversations:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAvailableUsers = async () => {
+    try {
+      const response = await axios.get("/users");
+      // Response already filters out current user from backend
+      setAvailableUsers(response.data || []);
+    } catch (error) {
+      console.error("Error loading available users:", error);
+    }
+  };
+
+  const startConversation = (userId, username) => {
+    setSelectedConversation({
+      id: userId,
+      username: username,
+    });
+    setShowAvailableUsers(false);
   };
 
   if (!user) {
@@ -46,6 +67,7 @@ const Conversations = () => {
             setSelectedConversation(null);
             loadConversations();
           }}
+          onMessageSent={loadConversations}
         />
       </div>
     );
@@ -54,6 +76,34 @@ const Conversations = () => {
   return (
     <div className="conversations-container">
       <h2>My Messages</h2>
+      <button
+        className="start-conversation-btn"
+        onClick={() => setShowAvailableUsers(!showAvailableUsers)}
+      >
+        {showAvailableUsers ? "Hide Users" : "Start New Conversation"}
+      </button>
+
+      {showAvailableUsers && (
+        <div className="available-users">
+          <h3>Available Users</h3>
+          {availableUsers.length === 0 ? (
+            <p>No available users to chat with</p>
+          ) : (
+            <div className="users-list">
+              {availableUsers.map((u) => (
+                <div
+                  key={u.id}
+                  className="user-item"
+                  onClick={() => startConversation(u.id, u.username)}
+                >
+                  <p>{u.username}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {loading ? (
         <p>Loading conversations...</p>
       ) : conversations.length === 0 ? (
@@ -82,7 +132,7 @@ const Conversations = () => {
                   />
                 ) : (
                   <div className="conversation-avatar-placeholder">
-                    {conversation.username.charAt(0).toUpperCase()}
+                    {(conversation.username || "U").charAt(0).toUpperCase()}
                   </div>
                 )}
                 <div className="conversation-details">

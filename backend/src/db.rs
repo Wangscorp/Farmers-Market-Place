@@ -637,7 +637,7 @@ pub async fn update_cart_item_quantity(pool: &PgPool, cart_item_id: i32, user_id
     let product = Product {
         id: row.try_get::<i32, _>("product_id")? as u32,
         name: row.try_get("p_name")?,
-        price: row.try_get::<f64, _>("price")?,
+        price: row.try_get::<f64, _>("p_price")?,
         category: row.try_get("p_category")?,
         description: row.try_get::<Option<String>, _>("p_description")?,
         image: row.try_get::<Option<String>, _>("p_image")?,
@@ -1106,7 +1106,7 @@ pub async fn send_message(pool: &PgPool, sender_id: i32, receiver_id: i32, conte
         r#"
         INSERT INTO messages (sender_id, receiver_id, content)
         VALUES ($1, $2, $3)
-        RETURNING id, sender_id, receiver_id, content, is_read, created_at
+        RETURNING id, sender_id, receiver_id, content, is_read, to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at
         "#,
     )
     .bind(sender_id)
@@ -1132,7 +1132,7 @@ pub async fn send_message(pool: &PgPool, sender_id: i32, receiver_id: i32, conte
         receiver_id: row.try_get("receiver_id")?,
         content: row.try_get("content")?,
         is_read: row.try_get("is_read")?,
-        created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "?".to_string()),
+        created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "2025-01-01T00:00:00Z".to_string()),
         sender_username,
         receiver_username,
     })
@@ -1142,7 +1142,8 @@ pub async fn get_messages_between_users(pool: &PgPool, user1_id: i32, user2_id: 
     let rows = sqlx::query(
         r#"
         SELECT
-            m.id, m.sender_id, m.receiver_id, m.content, m.is_read, m.created_at,
+            m.id, m.sender_id, m.receiver_id, m.content, m.is_read, 
+            to_char(m.created_at, 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as created_at,
             su.username as sender_username, ru.username as receiver_username
         FROM messages m
         JOIN users su ON m.sender_id = su.id
@@ -1164,7 +1165,7 @@ pub async fn get_messages_between_users(pool: &PgPool, user1_id: i32, user2_id: 
             receiver_id: row.try_get("receiver_id")?,
             content: row.try_get("content")?,
             is_read: row.try_get("is_read")?,
-            created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "?".to_string()),
+            created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "2025-01-01T00:00:00Z".to_string()),
             sender_username: row.try_get("sender_username")?,
             receiver_username: row.try_get("receiver_username")?,
         });
@@ -1173,38 +1174,67 @@ pub async fn get_messages_between_users(pool: &PgPool, user1_id: i32, user2_id: 
     Ok(messages)
 }
 
-pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<crate::models::Message>, sqlx::Error> {
+pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<crate::models::Conversation>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT DISTINCT ON (LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id))
-            m.id, m.sender_id, m.receiver_id, m.content, m.is_read, m.created_at,
-            su.username as sender_username, ru.username as receiver_username
-        FROM messages m
-        JOIN users su ON m.sender_id = su.id
-        JOIN users ru ON m.receiver_id = ru.id
-        WHERE m.sender_id = $1 OR m.receiver_id = $1
-        ORDER BY LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id), m.created_at DESC
+        WITH conversations AS (
+            SELECT DISTINCT ON (LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id))
+                m.id,
+                m.sender_id, 
+                m.receiver_id,
+                m.content,
+                m.created_at,
+                CASE 
+                    WHEN m.sender_id = $1 THEN ru.id
+                    ELSE su.id
+                END as other_user_id,
+                CASE 
+                    WHEN m.sender_id = $1 THEN ru.username
+                    ELSE su.username
+                END as username,
+                CASE 
+                    WHEN m.sender_id = $1 THEN ru.profile_image
+                    ELSE su.profile_image
+                END as profile_image
+            FROM messages m
+            JOIN users su ON m.sender_id = su.id
+            JOIN users ru ON m.receiver_id = ru.id
+            WHERE m.sender_id = $1 OR m.receiver_id = $1
+            ORDER BY LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id), m.created_at DESC
+        )
+        SELECT 
+            c.other_user_id,
+            c.username,
+            c.profile_image,
+            c.content,
+            c.created_at,
+            COUNT(m.id) as unread_count
+        FROM conversations c
+        LEFT JOIN messages m ON 
+            (LEAST(c.sender_id, c.receiver_id) = LEAST(m.sender_id, m.receiver_id) AND
+             GREATEST(c.sender_id, c.receiver_id) = GREATEST(m.sender_id, m.receiver_id))
+            AND m.receiver_id = $1 
+            AND m.is_read = FALSE
+        GROUP BY c.other_user_id, c.username, c.profile_image, c.content, c.created_at
         "#,
     )
     .bind(user_id)
     .fetch_all(pool)
     .await?;
 
-    let mut messages = Vec::new();
+    let mut conversations = Vec::new();
     for row in rows {
-        messages.push(crate::models::Message {
-            id: row.try_get("id")?,
-            sender_id: row.try_get("sender_id")?,
-            receiver_id: row.try_get("receiver_id")?,
-            content: row.try_get("content")?,
-            is_read: row.try_get("is_read")?,
-            created_at: row.try_get::<String, _>("created_at").unwrap_or_else(|_| "?".to_string()),
-            sender_username: row.try_get("sender_username")?,
-            receiver_username: row.try_get("receiver_username")?,
+        conversations.push(crate::models::Conversation {
+            id: row.try_get("other_user_id")?,
+            username: row.try_get("username")?,
+            profile_image: row.try_get("profile_image")?,
+            last_message: row.try_get("content")?,
+            last_message_time: row.try_get::<Option<String>, _>("created_at").unwrap_or(None),
+            unread_count: row.try_get::<i32, _>("unread_count")?,
         });
     }
 
-    Ok(messages)
+    Ok(conversations)
 }
 
 pub async fn mark_messages_as_read(pool: &PgPool, user_id: i32, other_user_id: i32) -> Result<(), sqlx::Error> {

@@ -142,6 +142,13 @@ export const CartProvider = ({ children }) => {
       setCartItems((prev) => prev.filter((item) => item.id !== itemId));
     } catch (error) {
       console.error("Error removing from cart:", error);
+      // If cart item not found (404/400), refresh cart to sync with backend
+      if (error.response?.status === 400 || error.response?.status === 404) {
+        console.log("Cart item not found, refreshing cart...");
+        await loadCartItems();
+        // Don't throw error after successful refresh - item was already removed
+        return;
+      }
       throw error;
     }
   };
@@ -170,6 +177,13 @@ export const CartProvider = ({ children }) => {
       );
     } catch (error) {
       console.error("Error updating quantity:", error);
+      // If cart item not found (404/400), refresh cart to sync with backend
+      if (error.response?.status === 400 || error.response?.status === 404) {
+        console.log("Cart item not found, refreshing cart...");
+        await loadCartItems();
+        // Don't throw error after successful refresh - item was already removed
+        return;
+      }
       throw error;
     }
   };

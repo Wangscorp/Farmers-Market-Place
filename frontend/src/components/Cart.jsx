@@ -4,10 +4,17 @@ import { useCart } from "./CartContext";
 import "./Cart.css";
 
 const Cart = () => {
-  const { cartItems, removeFromCart, updateQuantity, getTotalPrice, loading } =
-    useCart();
+  const {
+    cartItems,
+    removeFromCart,
+    updateQuantity,
+    getTotalPrice,
+    loading,
+    loadCartItems,
+  } = useCart();
   const [mpesaNumber, setMpesaNumber] = useState("");
   const [selectedItems, setSelectedItems] = useState(new Set());
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleItemSelect = (itemId, isSelected) => {
     setSelectedItems((prev) => {
@@ -182,9 +189,31 @@ const Cart = () => {
     return <div className="cart">Loading cart...</div>;
   }
 
+  const handleRefreshCart = async () => {
+    try {
+      setRefreshing(true);
+      await loadCartItems();
+      toast.success("Cart refreshed");
+    } catch (error) {
+      toast.error("Failed to refresh cart");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <div className="cart">
-      <h2>Your Cart</h2>
+      <div className="cart-header">
+        <h2>Your Cart</h2>
+        <button
+          onClick={handleRefreshCart}
+          disabled={refreshing}
+          className="btn-refresh-cart"
+          title="Refresh cart to sync with server"
+        >
+          {refreshing ? "🔄 Refreshing..." : "🔄 Refresh"}
+        </button>
+      </div>
       {cartItems.length === 0 ? (
         <p>Your cart is empty.</p>
       ) : (

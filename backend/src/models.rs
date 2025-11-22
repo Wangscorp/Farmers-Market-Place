@@ -143,6 +143,16 @@ pub struct Message {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct Conversation {
+    pub id: i32,
+    pub username: String,
+    pub profile_image: Option<String>,
+    pub last_message: Option<String>,
+    pub last_message_time: Option<String>,
+    pub unread_count: i32,
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Follow {
     pub id: i32,
     pub follower_id: i32,
