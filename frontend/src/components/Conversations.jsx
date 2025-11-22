@@ -11,12 +11,24 @@ const Conversations = () => {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showAvailableUsers, setShowAvailableUsers] = useState(false);
+  const pollIntervalRef = React.useRef(null);
 
   useEffect(() => {
     if (user) {
       loadConversations();
       loadAvailableUsers();
+
+      // Set up auto-refresh every 5 seconds
+      pollIntervalRef.current = setInterval(() => {
+        loadConversations();
+      }, 5000);
     }
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [user]);
 
   const loadConversations = async () => {

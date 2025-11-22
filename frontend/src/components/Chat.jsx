@@ -8,21 +8,30 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const { user } = useUser();
+  const pollIntervalRef = useRef(null);
 
   const loadMessages = useCallback(async () => {
     if (!otherUserId) return;
 
     try {
       setLoading(true);
+      setError(null);
       const response = await axios.get(`/messages/${otherUserId}`);
-      setMessages(response.data);
+      setMessages(response.data || []);
 
       // Mark messages as read
-      await axios.patch(`/messages/${otherUserId}/read`);
+      try {
+        await axios.patch(`/messages/${otherUserId}/read`);
+      } catch (readError) {
+        console.warn("Failed to mark messages as read:", readError);
+        // Don't fail the whole operation if marking as read fails
+      }
     } catch (error) {
       console.error("Error loading messages:", error);
+      setError("Failed to load messages. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -32,10 +41,19 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Set up polling to refresh messages every 3 seconds
   useEffect(() => {
-    if (otherUserId) {
+    loadMessages();
+
+    pollIntervalRef.current = setInterval(() => {
       loadMessages();
-    }
+    }, 3000);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
   }, [otherUserId, loadMessages]);
 
   useEffect(() => {
@@ -47,14 +65,18 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
 
     if (!newMessage.trim() || !otherUserId) return;
 
+    const messageContent = newMessage.trim();
+    setNewMessage("");
+
     try {
       const response = await axios.post("/messages", {
         receiver_id: otherUserId,
-        content: newMessage.trim(),
+        content: messageContent,
       });
 
-      setMessages((prev) => [...prev, response.data]);
-      setNewMessage("");
+      if (response.data) {
+        setMessages((prev) => [...prev, response.data]);
+      }
 
       // Notify parent component that a message was sent
       if (onMessageSent) {
@@ -62,7 +84,9 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
       }
     } catch (error) {
       console.error("Error sending message:", error);
-      toast.error("Failed to send message");
+      // Restore the message if sending failed
+      setNewMessage(messageContent);
+      toast.error("Failed to send message. Please try again.");
     }
   };
 
@@ -119,6 +143,7 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
       </div>
 
       <div className="messages-container">
+        {error && <div className="error-message">{error}</div>}
         {loading ? (
           <div className="loading">Loading messages...</div>
         ) : messages.length === 0 ? (

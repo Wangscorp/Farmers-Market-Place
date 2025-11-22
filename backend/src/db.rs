@@ -1238,6 +1238,7 @@ pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<c
 }
 
 pub async fn mark_messages_as_read(pool: &PgPool, user_id: i32, other_user_id: i32) -> Result<(), sqlx::Error> {
+    // Mark all messages sent by other_user_id to current user_id as read
     sqlx::query(
         "UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE"
     )

@@ -114,7 +114,8 @@
   color: #666;
 }
 
-.loading, .no-messages {
+.loading,
+.no-messages {
   text-align: center;
   color: #666;
   font-style: italic;
@@ -181,4 +182,15 @@
 
 .messages-container::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+.error-message {
+  padding: 10px 15px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  margin: 10px;
+  font-size: 14px;
+  text-align: center;
 }
