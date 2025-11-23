@@ -18,6 +18,12 @@ const Products = () => {
     return localStorage.getItem("locationBasedShopping") !== "false";
   });
 
+  // New state for search, filters, and sorting
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("name-asc"); // name-asc, name-desc, price-asc, price-desc, newest
+  const [priceRange, setPriceRange] = useState({ min: "", max: "" });
+  const [loading, setLoading] = useState(false);
+
   // Function to toggle location-based shopping
   const toggleLocationBasedShopping = () => {
     const newValue = !locationBasedShopping;
@@ -29,6 +35,7 @@ const Products = () => {
 
   const fetchProducts = async () => {
     try {
+      setLoading(true);
       let url = "/products";
       const params = [];
 
@@ -42,9 +49,37 @@ const Products = () => {
       }
 
       const response = await axios.get(url);
-      setProducts(response.data);
+      const productsData = response.data;
+
+      // Fetch reviews for each product
+      const productsWithReviews = await Promise.all(
+        productsData.map(async (product) => {
+          try {
+            const reviewsResponse = await axios.get(
+              `/reviews/product/${product.id}`
+            );
+            const reviews = reviewsResponse.data;
+            const avgRating =
+              reviews.length > 0
+                ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+                : 0;
+            return {
+              ...product,
+              reviewCount: reviews.length,
+              averageRating: avgRating,
+            };
+          } catch (error) {
+            return { ...product, reviewCount: 0, averageRating: 0 };
+          }
+        })
+      );
+
+      setProducts(productsWithReviews);
     } catch (error) {
       console.error("Error fetching products:", error);
+      toast.error("Failed to load products. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -95,12 +130,61 @@ const Products = () => {
   }, [user, locationBasedShopping]); // Refetch when user or preference changes
 
   const getFilteredProducts = () => {
-    if (selectedCategory === "All") {
-      return products;
+    let filtered = products;
+
+    // Filter by category
+    if (selectedCategory !== "All") {
+      filtered = filtered.filter(
+        (product) => getCategoryFromProduct(product) === selectedCategory
+      );
     }
-    return products.filter(
-      (product) => getCategoryFromProduct(product) === selectedCategory
-    );
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        (product) =>
+          product.name.toLowerCase().includes(query) ||
+          product.description?.toLowerCase().includes(query) ||
+          product.category?.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by price range
+    if (priceRange.min !== "") {
+      filtered = filtered.filter(
+        (product) => product.price >= parseFloat(priceRange.min)
+      );
+    }
+    if (priceRange.max !== "") {
+      filtered = filtered.filter(
+        (product) => product.price <= parseFloat(priceRange.max)
+      );
+    }
+
+    // Sort products
+    const sortedFiltered = [...filtered];
+    switch (sortBy) {
+      case "name-asc":
+        sortedFiltered.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "name-desc":
+        sortedFiltered.sort((a, b) => b.name.localeCompare(a.name));
+        break;
+      case "price-asc":
+        sortedFiltered.sort((a, b) => a.price - b.price);
+        break;
+      case "price-desc":
+        sortedFiltered.sort((a, b) => b.price - a.price);
+        break;
+      case "newest":
+        sortedFiltered.sort((a, b) => b.id - a.id);
+        break;
+      default:
+        break;
+    }
+
+    return sortedFiltered;
   };
 
   const getAvailableCategories = () => {
@@ -209,6 +293,83 @@ const Products = () => {
         </div>
       </div>
 
+      {/* Search and Filter Controls */}
+      <div className="filters-container">
+        <div className="search-bar">
+          <input
+            type="text"
+            placeholder="Search products by name, category, or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="search-input"
+          />
+          {searchQuery && (
+            <button
+              className="clear-search-btn"
+              onClick={() => setSearchQuery("")}
+              title="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="filter-controls">
+          <div className="price-range-filter">
+            <label>Price Range:</label>
+            <input
+              type="number"
+              placeholder="Min"
+              value={priceRange.min}
+              onChange={(e) =>
+                setPriceRange({ ...priceRange, min: e.target.value })
+              }
+              className="price-input"
+              min="0"
+            />
+            <span className="price-separator">-</span>
+            <input
+              type="number"
+              placeholder="Max"
+              value={priceRange.max}
+              onChange={(e) =>
+                setPriceRange({ ...priceRange, max: e.target.value })
+              }
+              className="price-input"
+              min="0"
+            />
+            {(priceRange.min || priceRange.max) && (
+              <button
+                className="clear-price-btn"
+                onClick={() => setPriceRange({ min: "", max: "" })}
+                title="Clear price filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="sort-control">
+            <label>Sort by:</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="sort-select"
+            >
+              <option value="name-asc">Name (A-Z)</option>
+              <option value="name-desc">Name (Z-A)</option>
+              <option value="price-asc">Price (Low to High)</option>
+              <option value="price-desc">Price (High to Low)</option>
+              <option value="newest">Newest First</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="results-count">
+          Showing {getFilteredProducts().length} of {products.length} products
+        </div>
+      </div>
+
       {/* Category Filter Tabs */}
       <div className="category-filter">
         {getAvailableCategories().map((category) => (
@@ -225,97 +386,148 @@ const Products = () => {
       </div>
 
       {/* Products Grid */}
-      <div className="products-list">
-        {getFilteredProducts().map((product) => (
-          <div key={product.id} className="product-item">
-            {product.image && (
-              <img
-                src={product.image}
-                alt={product.name}
-                className="product-image"
-              />
-            )}
-            <h3>{product.name}</h3>
-            <p>{product.description}</p>
-            <p className="price">KSh {product.price.toLocaleString()}</p>
-            <p className="quantity">Available: {product.quantity}</p>
-            <p className="category">{product.category}</p>
-            <div className="product-actions">
-              {user && user.role !== "Vendor" ? (
-                <div className="quantity-input-group">
-                  <label>Quantity:</label>
-                  <div className="quantity-controls">
+      {loading ? (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading products...</p>
+        </div>
+      ) : getFilteredProducts().length === 0 ? (
+        <div className="no-products">
+          <p>No products found matching your criteria.</p>
+          {(searchQuery ||
+            priceRange.min ||
+            priceRange.max ||
+            selectedCategory !== "All") && (
+            <button
+              className="reset-filters-btn"
+              onClick={() => {
+                setSearchQuery("");
+                setPriceRange({ min: "", max: "" });
+                setSelectedCategory("All");
+              }}
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="products-list">
+          {getFilteredProducts().map((product) => (
+            <div key={product.id} className="product-item">
+              {product.image && (
+                <img
+                  src={product.image}
+                  alt={product.name}
+                  className="product-image"
+                />
+              )}
+              <h3>{product.name}</h3>
+              <p>{product.description}</p>
+              <p className="price">KSh {product.price.toLocaleString()}</p>
+              <p className="quantity">Available: {product.quantity}</p>
+              <p className="category">{product.category}</p>
+
+              {/* Product Rating */}
+              {product.reviewCount > 0 && (
+                <div className="product-rating">
+                  <div className="stars">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <span
+                        key={star}
+                        className={
+                          star <= Math.round(product.averageRating)
+                            ? "star filled"
+                            : "star"
+                        }
+                      >
+                        ★
+                      </span>
+                    ))}
+                  </div>
+                  <span className="rating-text">
+                    {product.averageRating.toFixed(1)} ({product.reviewCount}{" "}
+                    {product.reviewCount === 1 ? "review" : "reviews"})
+                  </span>
+                </div>
+              )}
+
+              <div className="product-actions">
+                {user && user.role !== "Vendor" ? (
+                  <div className="quantity-input-group">
+                    <label>Quantity:</label>
+                    <div className="quantity-controls">
+                      <button
+                        type="button"
+                        onClick={() => decrementQuantity(product.id)}
+                        className="quantity-btn quantity-btn-decrement"
+                        disabled={(quantities[product.id] || 1) <= 1}
+                      >
+                        -
+                      </button>
+                      <input
+                        id={`quantity-${product.id}`}
+                        type="number"
+                        min="1"
+                        max={product.quantity}
+                        value={quantities[product.id] || 1}
+                        onChange={(e) =>
+                          handleQuantityChange(product.id, e.target.value)
+                        }
+                        className="quantity-input"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          incrementQuantity(product.id, product.quantity)
+                        }
+                        className="quantity-btn quantity-btn-increment"
+                        disabled={
+                          (quantities[product.id] || 1) >= product.quantity
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
                     <button
-                      type="button"
-                      onClick={() => decrementQuantity(product.id)}
-                      className="quantity-btn quantity-btn-decrement"
-                      disabled={(quantities[product.id] || 1) <= 1}
+                      onClick={() => handleAddToCart(product)}
+                      className="add-to-cart-btn"
                     >
-                      -
-                    </button>
-                    <input
-                      id={`quantity-${product.id}`}
-                      type="number"
-                      min="1"
-                      max={product.quantity}
-                      value={quantities[product.id] || 1}
-                      onChange={(e) =>
-                        handleQuantityChange(product.id, e.target.value)
-                      }
-                      className="quantity-input"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        incrementQuantity(product.id, product.quantity)
-                      }
-                      className="quantity-btn quantity-btn-increment"
-                      disabled={
-                        (quantities[product.id] || 1) >= product.quantity
-                      }
-                    >
-                      +
+                      Add to Cart
                     </button>
                   </div>
+                ) : (
+                  <div className="login-required-message">
+                    <p>
+                      Please{" "}
+                      <a
+                        href="/auth"
+                        style={{
+                          color: "#27ae60",
+                          textDecoration: "none",
+                          fontWeight: "bold",
+                        }}
+                      >
+                        log in
+                      </a>{" "}
+                      to purchase items
+                    </p>
+                  </div>
+                )}
+                {user && user.role !== "Vendor" && (
                   <button
-                    onClick={() => handleAddToCart(product)}
-                    className="add-to-cart-btn"
+                    onClick={() => {
+                      navigate(`/vendor-profile/${product.vendor_id}`);
+                    }}
+                    className="view-profile-btn"
                   >
-                    Add to Cart
+                    View Seller Profile
                   </button>
-                </div>
-              ) : (
-                <div className="login-required-message">
-                  <p>
-                    Please{" "}
-                    <a
-                      href="/auth"
-                      style={{
-                        color: "#27ae60",
-                        textDecoration: "none",
-                        fontWeight: "bold",
-                      }}
-                    >
-                      log in
-                    </a>{" "}
-                    to purchase items
-                  </p>
-                </div>
-              )}
-              {user && user.role !== "Vendor" && (
-                <button
-                  onClick={() => {
-                    navigate(`/vendor-profile/${product.vendor_id}`);
-                  }}
-                  className="view-profile-btn"
-                >
-                  View Seller Profile
-                </button>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Chat Component */}
       {chatUser && (

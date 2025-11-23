@@ -69,13 +69,13 @@ const Chatbot = () => {
         return (
           <div>
             <p>No products available at the moment. Please check back later!</p>
-              <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                <li>
-                  <Link to="/products" className="chatbot-link">
-                    Browse Products
-                  </Link>
-                </li>
-              </ul>
+            <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+              <li>
+                <Link to="/products" className="chatbot-link">
+                  Browse Products
+                </Link>
+              </li>
+            </ul>
           </div>
         );
       }
@@ -176,11 +176,11 @@ const Chatbot = () => {
               browse all products:
             </p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li>
-              <Link to="/products" className="chatbot-link">
-                Browse All Products
-              </Link>
-            </li>
+              <li>
+                <Link to="/products" className="chatbot-link">
+                  Browse All Products
+                </Link>
+              </li>
             </ul>
           </div>
         );
@@ -256,7 +256,7 @@ const Chatbot = () => {
         morning: "Good morning! ☀️ Welcome to Farmers Market Place.",
         afternoon: "Good afternoon! ☀️ Welcome to Farmers Market Place.",
         evening: "Good evening! 🌙 Welcome to Farmers Market Place.",
-        night: "Good night! 🌙 Welcome to Farmers Market Place."
+        night: "Good night! 🌙 Welcome to Farmers Market Place.",
       };
 
       return (
@@ -264,14 +264,30 @@ const Chatbot = () => {
           <p>{timeGreetings[currentTime]}</p>
           {!user ? (
             <div>
-              <p>To get the most out of our platform, please sign in or create an account:</p>
+              <p>
+                To get the most out of our platform, please sign in or create an
+                account:
+              </p>
               <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                <li><Link to="/auth?mode=login" className="chatbot-link">Sign In</Link> to existing account</li>
-                <li><Link to="/auth?mode=signup" className="chatbot-link">Sign Up</Link> for new account</li>
+                <li>
+                  <Link to="/auth?mode=login" className="chatbot-link">
+                    Sign In
+                  </Link>{" "}
+                  to existing account
+                </li>
+                <li>
+                  <Link to="/auth?mode=signup" className="chatbot-link">
+                    Sign Up
+                  </Link>{" "}
+                  for new account
+                </li>
               </ul>
             </div>
           ) : (
-            <p>I'm here to assist you with navigation, orders, and any questions about our marketplace. How can I help you today?</p>
+            <p>
+              I'm here to assist you with navigation, orders, and any questions
+              about our marketplace. How can I help you today?
+            </p>
           )}
         </div>
       );
@@ -289,19 +305,38 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>📍 <strong>Location-Based Shopping:</strong> We help you discover vendors near you!</p>
-          <p>During signup, you can set your location automatically via GPS or manually enter your city/area. This enables:</p>
+          <p>
+            📍 <strong>Location-Based Shopping:</strong> We help you discover
+            vendors near you!
+          </p>
+          <p>
+            During signup, you can set your location automatically via GPS or
+            manually enter your city/area. This enables:
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>Find vendors within 50km of your location</li>
             <li>Choose between "Local Shops" or "All Shops" mode</li>
             <li>Support local farmers in your community</li>
           </ul>
           {!user ? (
-            <p><a href="#/auth?mode=signup" className="chatbot-link">Create an account</a> to enable location features.</p>
+            <p>
+              <a href="#/auth?mode=signup" className="chatbot-link">
+                Create an account
+              </a>{" "}
+              to enable location features.
+            </p>
           ) : (
             <div>
-              <p>In your Products section, you can toggle between local and nationwide shopping.</p>
-              <p><a href="#/products" className="chatbot-link">Browse Products</a> to try location-based filtering.</p>
+              <p>
+                In your Products section, you can toggle between local and
+                nationwide shopping.
+              </p>
+              <p>
+                <a href="#/products" className="chatbot-link">
+                  Browse Products
+                </a>{" "}
+                to try location-based filtering.
+              </p>
             </div>
           )}
         </div>
@@ -321,7 +356,12 @@ const Chatbot = () => {
           <div>
             <p>Please sign in to view your orders and track their status.</p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li><a href="#/auth?mode=login" className="chatbot-link">Sign In</a> to access your orders</li>
+              <li>
+                <a href="#/auth?mode=login" className="chatbot-link">
+                  Sign In
+                </a>{" "}
+                to access your orders
+              </li>
             </ul>
           </div>
         );
@@ -329,15 +369,34 @@ const Chatbot = () => {
 
       return (
         <div>
-          <p>📦 <strong>Order Tracking:</strong> All orders are tracked with detailed status updates.</p>
-          <p><strong>Order Statuses:</strong></p>
+          <p>
+            📦 <strong>Order Tracking:</strong> All orders are tracked with
+            detailed status updates.
+          </p>
+          <p>
+            <strong>Order Statuses:</strong>
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li><strong>🟡 Pending:</strong> Payment confirmed, preparing for shipment</li>
-            <li><strong>🔵 Shipped:</strong> Order dispatched by vendor</li>
-            <li><strong>🟢 Delivered:</strong> Order received by customer</li>
-            <li><strong>🔴 Cancelled:</strong> Order cancelled or returned</li>
+            <li>
+              <strong>🟡 Pending:</strong> Payment confirmed, preparing for
+              shipment
+            </li>
+            <li>
+              <strong>🔵 Shipped:</strong> Order dispatched by vendor
+            </li>
+            <li>
+              <strong>🟢 Delivered:</strong> Order received by customer
+            </li>
+            <li>
+              <strong>🔴 Cancelled:</strong> Order cancelled or returned
+            </li>
           </ul>
-          <p><a href="#/shipping" className="chatbot-link">View My Orders</a> to check your order status and history.</p>
+          <p>
+            <a href="#/shipping" className="chatbot-link">
+              View My Orders
+            </a>{" "}
+            to check your order status and history.
+          </p>
           {user.role === "vendor" && (
             <p>As a vendor, you can update order statuses in your dashboard.</p>
           )}
@@ -357,8 +416,16 @@ const Chatbot = () => {
           <div>
             <p>To access your account settings, please sign in.</p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li><a href="#/auth?mode=login" className="chatbot-link">Sign In</a></li>
-              <li><a href="#/auth?mode=signup" className="chatbot-link">Create New Account</a></li>
+              <li>
+                <a href="#/auth?mode=login" className="chatbot-link">
+                  Sign In
+                </a>
+              </li>
+              <li>
+                <a href="#/auth?mode=signup" className="chatbot-link">
+                  Create New Account
+                </a>
+              </li>
             </ul>
           </div>
         );
@@ -366,18 +433,37 @@ const Chatbot = () => {
 
       return (
         <div>
-          <p>⚙️ <strong>Account Management:</strong></p>
+          <p>
+            ⚙️ <strong>Account Management:</strong>
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li>Your current role: <strong>{user.role}</strong></li>
+            <li>
+              Your current role: <strong>{user.role}</strong>
+            </li>
             <li>Username: {user.username}</li>
             {user.role === "vendor" && (
-              <li><a href="#/vendor" className="chatbot-link">Vendor Dashboard</a> - Manage your products</li>
+              <li>
+                <a href="#/vendor" className="chatbot-link">
+                  Vendor Dashboard
+                </a>{" "}
+                - Manage your products
+              </li>
             )}
             {user.role === "customer" && (
-              <li><a href="#/shipping" className="chatbot-link">My Orders</a> - View order history</li>
+              <li>
+                <a href="#/shipping" className="chatbot-link">
+                  My Orders
+                </a>{" "}
+                - View order history
+              </li>
             )}
             {user.role === "admin" && (
-              <li><a href="#/admin" className="chatbot-link">Admin Dashboard</a> - System management</li>
+              <li>
+                <a href="#/admin" className="chatbot-link">
+                  Admin Dashboard
+                </a>{" "}
+                - System management
+              </li>
             )}
           </ul>
         </div>
@@ -394,8 +480,13 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>🏪 <strong>Becoming a Vendor:</strong> Join our network of verified suppliers!</p>
-          <p><strong>Process:</strong></p>
+          <p>
+            🏪 <strong>Becoming a Vendor:</strong> Join our network of verified
+            suppliers!
+          </p>
+          <p>
+            <strong>Process:</strong>
+          </p>
           <ol style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>Create a vendor account</li>
             <li>Submit verification documents</li>
@@ -403,21 +494,39 @@ const Chatbot = () => {
             <li>Once approved, you can add products and start selling</li>
           </ol>
           {!user ? (
-            <p><a href="#/auth?mode=signup&role=vendor" className="chatbot-link">Create Vendor Account</a></p>
+            <p>
+              <a href="#/auth?mode=signup&role=vendor" className="chatbot-link">
+                Create Vendor Account
+              </a>
+            </p>
           ) : user.role === "vendor" ? (
             <div>
               <p>Welcome back! As a verified vendor:</p>
               <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-                <li><a href="#/vendor" className="chatbot-link">Manage Products</a></li>
-                <li><a href="#/shipping" className="chatbot-link">View Customer Orders</a></li>
+                <li>
+                  <a href="#/vendor" className="chatbot-link">
+                    Manage Products
+                  </a>
+                </li>
+                <li>
+                  <a href="#/shipping" className="chatbot-link">
+                    View Customer Orders
+                  </a>
+                </li>
               </ul>
             </div>
           ) : (
-            <p>You can also create a separate vendor account if you're currently a customer.</p>
+            <p>
+              You can also create a separate vendor account if you're currently
+              a customer.
+            </p>
           )}
 
           <p style={{ marginTop: "12px", fontSize: "12px", color: "#666" }}>
-            <em>All vendors undergo verification to ensure quality and authenticity of products.</em>
+            <em>
+              All vendors undergo verification to ensure quality and
+              authenticity of products.
+            </em>
           </p>
         </div>
       );
@@ -434,7 +543,10 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>💳 <strong>Secure Payments:</strong> We use M-Pesa for all transactions.</p>
+          <p>
+            💳 <strong>Secure Payments:</strong> We use M-Pesa for all
+            transactions.
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>Safe and instant mobile money payments</li>
             <li>No credit card fees or hidden charges</li>
@@ -444,8 +556,16 @@ const Chatbot = () => {
           </ul>
           {user && (
             <div style={{ marginTop: "12px" }}>
-              <p><a href="#/payments/history" className="chatbot-link">View Payment History</a></p>
-              <p><a href="#/cart" className="chatbot-link">Checkout Cart</a></p>
+              <p>
+                <a href="#/payments/history" className="chatbot-link">
+                  View Payment History
+                </a>
+              </p>
+              <p>
+                <a href="#/cart" className="chatbot-link">
+                  Checkout Cart
+                </a>
+              </p>
             </div>
           )}
         </div>
@@ -461,7 +581,9 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>🛒 <strong>Shopping Cart:</strong> Easy and secure online shopping.</p>
+          <p>
+            🛒 <strong>Shopping Cart:</strong> Easy and secure online shopping.
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>Browse products and add to cart</li>
             <li>Adjust quantities anytime</li>
@@ -470,11 +592,25 @@ const Chatbot = () => {
             <li>Track orders from cart to delivery</li>
           </ul>
           {!user ? (
-            <p><a href="#/auth?mode=login" className="chatbot-link">Sign in</a> to access shopping features.</p>
+            <p>
+              <a href="#/auth?mode=login" className="chatbot-link">
+                Sign in
+              </a>{" "}
+              to access shopping features.
+            </p>
           ) : (
             <div>
-              <p>Ready to shop? <a href="#/products" className="chatbot-link">Browse Products</a></p>
-              <p><a href="#/cart" className="chatbot-link">View Cart</a></p>
+              <p>
+                Ready to shop?{" "}
+                <a href="#/products" className="chatbot-link">
+                  Browse Products
+                </a>
+              </p>
+              <p>
+                <a href="#/cart" className="chatbot-link">
+                  View Cart
+                </a>
+              </p>
             </div>
           )}
         </div>
@@ -507,13 +643,28 @@ const Chatbot = () => {
 
       return (
         <div>
-          <p>🏆 <strong>Recommendations:</strong></p>
+          <p>
+            🏆 <strong>Recommendations:</strong>
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li><strong>Affordable produce:</strong> Tomatoes, onions, and potatoes from local farmers</li>
-            <li><strong>Fresh dairy:</strong> Milk and eggs from verified suppliers</li>
-            <li><strong>Quality meats:</strong> Beef and chicken from trusted vendors</li>
+            <li>
+              <strong>Affordable produce:</strong> Tomatoes, onions, and
+              potatoes from local farmers
+            </li>
+            <li>
+              <strong>Fresh dairy:</strong> Milk and eggs from verified
+              suppliers
+            </li>
+            <li>
+              <strong>Quality meats:</strong> Beef and chicken from trusted
+              vendors
+            </li>
           </ul>
-          <p><a href="#/products" className="chatbot-link">Explore All Products</a></p>
+          <p>
+            <a href="#/products" className="chatbot-link">
+              Explore All Products
+            </a>
+          </p>
         </div>
       );
     }
@@ -529,22 +680,49 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>🚀 <strong>Getting Started Guide:</strong></p>
+          <p>
+            🚀 <strong>Getting Started Guide:</strong>
+          </p>
           <ol style={{ marginTop: "8px", paddingLeft: "20px" }}>
             {!user && (
               <>
-                <li><strong>Sign Up:</strong> <a href="#/auth?mode=signup" className="chatbot-link">Create Account</a> (customer or vendor)</li>
-                <li><strong>Add Location:</strong> During signup, set your location for local shopping</li>
+                <li>
+                  <strong>Sign Up:</strong>{" "}
+                  <a href="#/auth?mode=signup" className="chatbot-link">
+                    Create Account
+                  </a>{" "}
+                  (customer or vendor)
+                </li>
+                <li>
+                  <strong>Add Location:</strong> During signup, set your
+                  location for local shopping
+                </li>
               </>
             )}
-            <li><strong>Browse:</strong> <a href="#/products" className="chatbot-link">Explore Products</a> with location-based filtering</li>
-            <li><strong>Shop:</strong> Add items to cart, then checkout with M-Pesa</li>
-            <li><strong>Track:</strong> Monitor order status in "My Orders"</li>
+            <li>
+              <strong>Browse:</strong>{" "}
+              <a href="#/products" className="chatbot-link">
+                Explore Products
+              </a>{" "}
+              with location-based filtering
+            </li>
+            <li>
+              <strong>Shop:</strong> Add items to cart, then checkout with
+              M-Pesa
+            </li>
+            <li>
+              <strong>Track:</strong> Monitor order status in "My Orders"
+            </li>
             {user?.role === "vendor" && (
-              <li><strong>Sell:</strong> Use vendor dashboard to manage products and orders</li>
+              <li>
+                <strong>Sell:</strong> Use vendor dashboard to manage products
+                and orders
+              </li>
             )}
           </ol>
-          <p style={{ marginTop: "12px" }}>Need help with a specific feature? Just ask!</p>
+          <p style={{ marginTop: "12px" }}>
+            Need help with a specific feature? Just ask!
+          </p>
         </div>
       );
     }
@@ -559,8 +737,13 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>🌱 <strong>About Farmers Market Place:</strong></p>
-          <p>We are an innovative online marketplace connecting local farmers and vendors directly with customers. Our mission is to:</p>
+          <p>
+            🌱 <strong>About Farmers Market Place:</strong>
+          </p>
+          <p>
+            We are an innovative online marketplace connecting local farmers and
+            vendors directly with customers. Our mission is to:
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>Support local agriculture and sustainable farming</li>
             <li>Provide fresh, quality produce at fair prices</li>
@@ -568,7 +751,10 @@ const Chatbot = () => {
             <li>Ensure secure transactions through M-Pesa integration</li>
             <li>Build a transparent supply chain from farm to table</li>
           </ul>
-          <p><strong>Serving:</strong> Nairobi and surrounding areas | <strong>Payments:</strong> M-Pesa only</p>
+          <p>
+            <strong>Serving:</strong> Nairobi and surrounding areas |{" "}
+            <strong>Payments:</strong> M-Pesa only
+          </p>
         </div>
       );
     }
@@ -584,32 +770,58 @@ const Chatbot = () => {
       if (!user) {
         return (
           <div>
-            <p>🏠 <strong>Public Navigation:</strong></p>
+            <p>
+              🏠 <strong>Public Navigation:</strong>
+            </p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li><strong>Home:</strong> Browse featured products and get started</li>
-              <li><strong>Products:</strong> Search and filter all available items</li>
-              <li><strong>Login:</strong> Access your account</li>
+              <li>
+                <strong>Home:</strong> Browse featured products and get started
+              </li>
+              <li>
+                <strong>Products:</strong> Search and filter all available items
+              </li>
+              <li>
+                <strong>Login:</strong> Access your account
+              </li>
             </ul>
-            <p><a href="#/" className="chatbot-link">Go to Homepage</a></p>
+            <p>
+              <a href="#/" className="chatbot-link">
+                Go to Homepage
+              </a>
+            </p>
           </div>
         );
       }
 
       return (
         <div>
-          <p>🧭 <strong>Navigation Guide:</strong></p>
+          <p>
+            🧭 <strong>Navigation Guide:</strong>
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li><strong>Home:</strong> Featured products and marketplace overview</li>
-            <li><strong>Products:</strong> Browse with location-based filtering</li>
+            <li>
+              <strong>Home:</strong> Featured products and marketplace overview
+            </li>
+            <li>
+              <strong>Products:</strong> Browse with location-based filtering
+            </li>
             {user.role !== "vendor" && (
-              <li><strong>Cart:</strong> Your shopping cart and checkout</li>
+              <li>
+                <strong>Cart:</strong> Your shopping cart and checkout
+              </li>
             )}
-            <li><strong>My Orders:</strong> Order history and tracking</li>
+            <li>
+              <strong>My Orders:</strong> Order history and tracking
+            </li>
             {user.role === "vendor" && (
-              <li><strong>Vendor Dashboard:</strong> Product and sales management</li>
+              <li>
+                <strong>Vendor Dashboard:</strong> Product and sales management
+              </li>
             )}
             {user.role === "admin" && (
-              <li><strong>Admin Dashboard:</strong> System management</li>
+              <li>
+                <strong>Admin Dashboard:</strong> System management
+              </li>
             )}
           </ul>
         </div>
@@ -628,15 +840,29 @@ const Chatbot = () => {
     ) {
       return (
         <div>
-          <p>🆘 <strong>Support & Help:</strong></p>
+          <p>
+            🆘 <strong>Support & Help:</strong>
+          </p>
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-            <li><strong>I'm always here</strong> for questions about using the platform</li>
-            <li><strong>Report vendor issues</strong> directly in your order history</li>
-            <li><strong>Technical problems:</strong> Try refreshing the page or clearing cache</li>
-            <li><strong>Payment issues:</strong> Check M-Pesa balance and network</li>
+            <li>
+              <strong>I'm always here</strong> for questions about using the
+              platform
+            </li>
+            <li>
+              <strong>Report vendor issues</strong> directly in your order
+              history
+            </li>
+            <li>
+              <strong>Technical problems:</strong> Try refreshing the page or
+              clearing cache
+            </li>
+            <li>
+              <strong>Payment issues:</strong> Check M-Pesa balance and network
+            </li>
           </ul>
           <p style={{ marginTop: "12px" }}>
-            For urgent issues requiring human intervention, please use the report features in orders or contact the admin.
+            For urgent issues requiring human intervention, please use the
+            report features in orders or contact the admin.
           </p>
         </div>
       );
@@ -651,15 +877,36 @@ const Chatbot = () => {
       if (user?.role === "admin") {
         return (
           <div>
-            <p>👑 <strong>Admin Features:</strong></p>
+            <p>
+              👑 <strong>Admin Features:</strong>
+            </p>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li><strong>User Management:</strong> View, verify, and manage all accounts</li>
-              <li><strong>Vendor Approval:</strong> Review vendor applications and documents</li>
-              <li><strong>Report Resolution:</strong> Handle customer and vendor disputes</li>
-              <li><strong>System Monitoring:</strong> Database insights and analytics</li>
-              <li><strong>Account Recovery:</strong> Reset passwords and manage access</li>
+              <li>
+                <strong>User Management:</strong> View, verify, and manage all
+                accounts
+              </li>
+              <li>
+                <strong>Vendor Approval:</strong> Review vendor applications and
+                documents
+              </li>
+              <li>
+                <strong>Report Resolution:</strong> Handle customer and vendor
+                disputes
+              </li>
+              <li>
+                <strong>System Monitoring:</strong> Database insights and
+                analytics
+              </li>
+              <li>
+                <strong>Account Recovery:</strong> Reset passwords and manage
+                access
+              </li>
             </ul>
-            <p><a href="#/admin" className="chatbot-link">Access Admin Dashboard</a></p>
+            <p>
+              <a href="#/admin" className="chatbot-link">
+                Access Admin Dashboard
+              </a>
+            </p>
           </div>
         );
       } else if (message.includes("become admin")) {
@@ -677,17 +924,42 @@ const Chatbot = () => {
       return (
         <div>
           <p>You're very welcome! 😊</p>
-          <p>It's my pleasure to help you navigate Farmers Market Place. Whether you need help shopping, selling, or just have questions about our platform, I'm always here.</p>
+          <p>
+            It's my pleasure to help you navigate Farmers Market Place. Whether
+            you need help shopping, selling, or just have questions about our
+            platform, I'm always here.
+          </p>
           <p>Happy shopping! 🛒🌱</p>
         </div>
       );
     }
 
-    // === DEFAULT RESPONSE ===
+    // === AI FALLBACK RESPONSE ===
+    // Try to get response from Gemini Pro for questions not handled above
+    try {
+      const response = await axios.post("/chatbot", {
+        prompt: `You are a helpful assistant for Farmers Market Place, an online marketplace connecting farmers and customers. 
+        Context: This is a platform where customers can buy fresh produce from local farmers/vendors, track orders, make payments via M-Pesa, and communicate with vendors.
+        
+        User question: "${userMessage}"
+        
+        Please provide a helpful, concise response focused on the marketplace context. Keep it friendly and informative.`,
+      });
+
+      if (response.data && response.data.response) {
+        return response.data.response;
+      }
+    } catch (error) {
+      console.log("AI response not available, using fallback");
+    }
+
+    // === DEFAULT RESPONSE (if AI fails) ===
     return (
       <div>
         <p>🤔 I can help you with many aspects of Farmers Market Place.</p>
-        <p><strong>I can assist with:</strong></p>
+        <p>
+          <strong>I can assist with:</strong>
+        </p>
         <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
           <li>📍 Location-based shopping and finding nearby vendors</li>
           <li>📦 Order tracking and shipping status</li>
@@ -698,9 +970,17 @@ const Chatbot = () => {
           <li>🧭 Navigation and app features</li>
           <li>🆘 Support and troubleshooting</li>
         </ul>
-        <p style={{ marginTop: "12px" }}>Try asking about any of these topics, or simply say what you're looking for!</p>
+        <p style={{ marginTop: "12px" }}>
+          Try asking about any of these topics, or simply say what you're
+          looking for!
+        </p>
         {!user && (
-          <p><a href="#/auth" className="chatbot-link">Sign in or sign up</a> to access all features.</p>
+          <p>
+            <a href="#/auth" className="chatbot-link">
+              Sign in or sign up
+            </a>{" "}
+            to access all features.
+          </p>
         )}
       </div>
     );
@@ -754,7 +1034,9 @@ const Chatbot = () => {
           <div className="chatbot-header">
             <div>
               <h3>Farmers Market Assistant</h3>
-              <div className="chatbot-subtitle">Your 24/7 marketplace guide</div>
+              <div className="chatbot-subtitle">
+                Your 24/7 marketplace guide
+              </div>
             </div>
             <button
               className="chatbot-close"

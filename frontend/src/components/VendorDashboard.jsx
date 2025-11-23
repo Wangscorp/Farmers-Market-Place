@@ -111,6 +111,64 @@ const VendorDashboard = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validation
+    if (!name.trim()) {
+      toast.error("Product name is required");
+      return;
+    }
+
+    if (name.trim().length < 3) {
+      toast.error("Product name must be at least 3 characters");
+      return;
+    }
+
+    if (name.trim().length > 100) {
+      toast.error("Product name must be less than 100 characters");
+      return;
+    }
+
+    const priceNum = parseFloat(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error("Please enter a valid price greater than 0");
+      return;
+    }
+
+    if (priceNum > 1000000) {
+      toast.error("Price cannot exceed KSh 1,000,000");
+      return;
+    }
+
+    if (!category.trim()) {
+      toast.error("Category is required");
+      return;
+    }
+
+    const quantityNum = parseInt(quantity);
+    if (isNaN(quantityNum) || quantityNum < 0) {
+      toast.error("Please enter a valid quantity (0 or more)");
+      return;
+    }
+
+    if (quantityNum > 100000) {
+      toast.error("Quantity cannot exceed 100,000");
+      return;
+    }
+
+    if (!description.trim()) {
+      toast.error("Product description is required");
+      return;
+    }
+
+    if (description.trim().length < 10) {
+      toast.error("Description must be at least 10 characters");
+      return;
+    }
+
+    if (description.trim().length > 1000) {
+      toast.error("Description must be less than 1000 characters");
+      return;
+    }
+
     // Check if image is required for new products
     if (!editingProduct && !resizedImage) {
       toast.error("Please upload a product image before submitting.");
@@ -118,27 +176,22 @@ const VendorDashboard = () => {
     }
 
     try {
+      const productData = {
+        name: name.trim(),
+        price: priceNum,
+        category: category.trim(),
+        description: description.trim(),
+        quantity: quantityNum,
+        image: resizedImage,
+      };
+
       if (editingProduct) {
         // Update existing product
-        await axios.patch(`/products/${editingProduct.id}`, {
-          name,
-          price: parseFloat(price),
-          category,
-          description,
-          quantity: parseInt(quantity),
-          image: resizedImage,
-        });
+        await axios.patch(`/products/${editingProduct.id}`, productData);
         toast.success("Product updated successfully!");
       } else {
         // Create new product
-        await axios.post("/products", {
-          name,
-          price: parseFloat(price),
-          category,
-          description,
-          quantity: parseInt(quantity),
-          image: resizedImage,
-        });
+        await axios.post("/products", productData);
         toast.success("Product created successfully!");
       }
 

@@ -6,6 +6,7 @@ use sqlx::{PgPool, Row};
 use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, VerifyDeliveryRequest, WithdrawRequest, WithdrawResponse};
 use crate::db;  // Database helper functions
 use crate::mpesa::{MpesaClient, MpesaConfig, StkCallbackBody, extract_callback_data, PaymentStatus};
+use crate::gemini;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::OnceLock;
@@ -195,8 +196,15 @@ use actix_web::http::header::AUTHORIZATION;
  */
 #[get("/cart")]
 async fn get_cart(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> ActixResult<HttpResponse> {
-    let user_id = match check_customer_auth(&req) {
-        Ok(id) => id,
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => {
+            // Allow both customers and vendors to access cart
+            if claims.role == "Customer" || claims.role == "Vendor" {
+                claims.sub
+            } else {
+                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
+            }
+        },
         Err(response) => return Ok(response),
     };
 
@@ -219,8 +227,15 @@ async fn get_cart(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> Actix
  */
 #[post("/cart")]
 async fn add_to_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>, cart_req: web::Json<CartItemRequest>) -> ActixResult<HttpResponse> {
-    let user_id = match check_customer_auth(&req) {
-        Ok(id) => id,
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => {
+            // Allow both customers and vendors to add to cart
+            if claims.role == "Customer" || claims.role == "Vendor" {
+                claims.sub
+            } else {
+                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
+            }
+        },
         Err(response) => return Ok(response),
     };
 
@@ -244,8 +259,15 @@ async fn add_to_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>,
  */
 #[patch("/cart/{item_id}")]
 async fn update_cart_item(req: actix_web::HttpRequest, pool: web::Data<PgPool>, item_id: web::Path<i32>, update_req: web::Json<UpdateCartItemRequest>) -> ActixResult<HttpResponse> {
-    let user_id = match check_customer_auth(&req) {
-        Ok(id) => id,
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => {
+            // Allow both customers and vendors to update cart
+            if claims.role == "Customer" || claims.role == "Vendor" {
+                claims.sub
+            } else {
+                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
+            }
+        },
         Err(response) => return Ok(response),
     };
 
@@ -268,8 +290,15 @@ async fn update_cart_item(req: actix_web::HttpRequest, pool: web::Data<PgPool>, 
  */
 #[delete("/cart/{item_id}")]
 async fn remove_from_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>, item_id: web::Path<i32>) -> ActixResult<HttpResponse> {
-    let user_id = match check_customer_auth(&req) {
-        Ok(id) => id,
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => {
+            // Allow both customers and vendors to remove from cart
+            if claims.role == "Customer" || claims.role == "Vendor" {
+                claims.sub
+            } else {
+                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
+            }
+        },
         Err(response) => return Ok(response),
     };
 
@@ -653,16 +682,51 @@ async fn get_all_users_for_messaging(
 
     match db::get_all_users(&pool).await {
         Ok(users) => {
-            // Filter out the current user and return
+            // Check if current users are following each other (mutual friends)
+            let following_ids: Vec<i32> = match sqlx::query_scalar(
+                "SELECT vendor_id FROM follows WHERE follower_id = $1"
+            )
+            .bind(current_user_id)
+            .fetch_all(pool.get_ref())
+            .await {
+                Ok(ids) => ids,
+                Err(_) => Vec::new(),
+            };
+
+            let followers_ids: Vec<i32> = match sqlx::query_scalar(
+                "SELECT follower_id FROM follows WHERE vendor_id = $1"
+            )
+            .bind(current_user_id)
+            .fetch_all(pool.get_ref())
+            .await {
+                Ok(ids) => ids,
+                Err(_) => Vec::new(),
+            };
+
+            // Filter out the current user and admins, then return enriched data
             let filtered_users: Vec<_> = users
                 .into_iter()
-                .filter(|u| u.id != current_user_id)
-                .map(|u| serde_json::json!({
-                    "id": u.id,
-                    "username": u.username,
-                    "email": u.email,
-                    "profile_image": u.profile_image,
-                }))
+                .filter(|u| u.id != current_user_id && !matches!(u.role, Role::Admin))
+                .map(|u| {
+                    let is_followed = following_ids.contains(&u.id);
+                    let is_following_back = followers_ids.contains(&u.id);
+                    let is_mutual_friend = is_followed && is_following_back;
+
+                    serde_json::json!({
+                        "id": u.id,
+                        "username": u.username,
+                        "role": u.role,
+                        "profile_image": u.profile_image,
+                        // Only show personal info if mutual friends
+                        "email": if is_mutual_friend { &u.secondary_email } else { &None },
+                        "phone": if is_mutual_friend { &u.mpesa_number } else { &None },
+                        "location": if is_mutual_friend { &u.location_string } else { &None },
+                        // Follow status for UI
+                        "is_followed": is_followed,
+                        "is_following_back": is_following_back,
+                        "is_mutual_friend": is_mutual_friend
+                    })
+                })
                 .collect();
             Ok(HttpResponse::Ok().json(filtered_users))
         },
@@ -1480,7 +1544,10 @@ async fn get_user_conversations_route(
 
     match db::get_user_conversations(&pool, user_id).await {
         Ok(conversations) => Ok(HttpResponse::Ok().json(conversations)),
-        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to fetch conversations")),
+        Err(e) => {
+            eprintln!("Database error in get_user_conversations: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json("Failed to fetch conversations"))
+        },
     }
 }
 
@@ -2352,6 +2419,20 @@ async fn withdraw_wallet_route(
     }
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ChatbotRequest {
+    pub prompt: String,
+}
+
+/// POST /chatbot - Get a response from the AI chatbot.
+#[post("/chatbot")]
+async fn chatbot_handler(req: web::Json<ChatbotRequest>) -> ActixResult<HttpResponse> {
+    match gemini::get_gemini_response(&req.prompt).await {
+        Ok(response) => Ok(HttpResponse::Ok().json(json!({ "response": response }))),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to get response from chatbot")),
+    }
+}
+
 /**
  * Initialize route configuration
  *
@@ -2445,5 +2526,6 @@ pub fn init(cfg: &mut web::ServiceConfig) {
         .service(get_databases)
         .service(get_tables)
         .service(get_table_columns)
-        .service(get_table_data);
+        .service(get_table_data)
+        .service(chatbot_handler);
 }

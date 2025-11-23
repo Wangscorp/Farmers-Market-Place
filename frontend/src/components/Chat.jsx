@@ -69,13 +69,28 @@ const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
     setNewMessage("");
 
     try {
+      // Add the sent message to the list immediately for better UX
+      const optimisticMessage = {
+        id: Date.now(), // Temporary ID
+        sender_id: user.id,
+        receiver_id: otherUserId,
+        content: messageContent,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+
       const response = await axios.post("/messages", {
         receiver_id: otherUserId,
         content: messageContent,
       });
 
       if (response.data) {
-        setMessages((prev) => [...prev, response.data]);
+        // Replace the optimistic message with the real one from the server
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === optimisticMessage.id ? response.data : msg
+          )
+        );
       }
 
       // Notify parent component that a message was sent

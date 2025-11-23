@@ -14,6 +14,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { toast } from "react-toastify";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 import "./PurchaseReport.css";
 
 const COLORS = [
@@ -49,6 +52,113 @@ const PurchaseReport = () => {
     }
   };
 
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(20);
+    doc.text("Purchase Report", 14, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+    doc.text(`Total Spent: KES ${report.total_spent.toFixed(2)}`, 14, 38);
+    doc.text(`Total Orders: ${report.total_orders}`, 14, 46);
+
+    let yPosition = 58;
+
+    if (
+      report.purchases_by_category &&
+      report.purchases_by_category.length > 0
+    ) {
+      doc.text("Purchases by Category", 14, yPosition);
+
+      const categoryData = report.purchases_by_category.map((cat) => [
+        cat.category,
+        cat.quantity.toString(),
+        `KES ${cat.total_spent.toFixed(2)}`,
+      ]);
+
+      doc.autoTable({
+        startY: yPosition + 4,
+        head: [["Category", "Items Purchased", "Total Spent"]],
+        body: categoryData,
+        theme: "grid",
+        headStyles: { fillColor: [0, 132, 254] },
+      });
+
+      yPosition = doc.lastAutoTable.finalY + 10;
+    }
+
+    if (report.purchases_by_vendor && report.purchases_by_vendor.length > 0) {
+      if (yPosition > 250) {
+        doc.addPage();
+        yPosition = 20;
+      }
+
+      doc.text("Purchases by Vendor", 14, yPosition);
+
+      const vendorData = report.purchases_by_vendor.map((vendor) => [
+        vendor.vendor_name,
+        vendor.order_count.toString(),
+        `KES ${vendor.total_spent.toFixed(2)}`,
+      ]);
+
+      doc.autoTable({
+        startY: yPosition + 4,
+        head: [["Vendor", "Orders", "Total Spent"]],
+        body: vendorData,
+        theme: "grid",
+        headStyles: { fillColor: [0, 132, 254] },
+      });
+    }
+
+    doc.save(`purchase-report-${new Date().toISOString().split("T")[0]}.pdf`);
+    toast.success("PDF downloaded successfully!");
+  };
+
+  const downloadExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    const summaryData = [
+      ["Purchase Report Summary"],
+      ["Generated", new Date().toLocaleDateString()],
+      [""],
+      ["Total Spent", `KES ${report.total_spent.toFixed(2)}`],
+      ["Total Orders", report.total_orders],
+      ["Categories", report.purchases_by_category?.length || 0],
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+    if (
+      report.purchases_by_category &&
+      report.purchases_by_category.length > 0
+    ) {
+      const categoryData = report.purchases_by_category.map((cat) => ({
+        Category: cat.category,
+        "Items Purchased": cat.quantity,
+        "Total Spent (KES)": cat.total_spent.toFixed(2),
+      }));
+      const categorySheet = XLSX.utils.json_to_sheet(categoryData);
+      XLSX.utils.book_append_sheet(wb, categorySheet, "By Category");
+    }
+
+    if (report.purchases_by_vendor && report.purchases_by_vendor.length > 0) {
+      const vendorData = report.purchases_by_vendor.map((vendor) => ({
+        Vendor: vendor.vendor_name,
+        Orders: vendor.order_count,
+        "Total Spent (KES)": vendor.total_spent.toFixed(2),
+      }));
+      const vendorSheet = XLSX.utils.json_to_sheet(vendorData);
+      XLSX.utils.book_append_sheet(wb, vendorSheet, "By Vendor");
+    }
+
+    XLSX.writeFile(
+      wb,
+      `purchase-report-${new Date().toISOString().split("T")[0]}.xlsx`
+    );
+    toast.success("Excel file downloaded successfully!");
+  };
+
   if (loading) {
     return (
       <div className="purchase-report">
@@ -69,7 +179,17 @@ const PurchaseReport = () => {
 
   return (
     <div className="purchase-report">
-      <h2>Purchase Analytics</h2>
+      <div className="report-header">
+        <h2>Purchase Analytics</h2>
+        <div className="download-buttons">
+          <button onClick={downloadPDF} className="download-btn pdf-btn">
+            📄 Download PDF
+          </button>
+          <button onClick={downloadExcel} className="download-btn excel-btn">
+            📊 Download Excel
+          </button>
+        </div>
+      </div>
 
       <div className="summary-cards">
         <div className="summary-card">

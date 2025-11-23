@@ -1177,45 +1177,39 @@ pub async fn get_messages_between_users(pool: &PgPool, user1_id: i32, user2_id: 
 pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<crate::models::Conversation>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        WITH conversations AS (
-            SELECT DISTINCT ON (LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id))
-                m.id,
-                m.sender_id, 
-                m.receiver_id,
-                m.content,
-                m.created_at,
-                CASE 
-                    WHEN m.sender_id = $1 THEN ru.id
-                    ELSE su.id
-                END as other_user_id,
-                CASE 
-                    WHEN m.sender_id = $1 THEN ru.username
-                    ELSE su.username
-                END as username,
-                CASE 
-                    WHEN m.sender_id = $1 THEN ru.profile_image
-                    ELSE su.profile_image
-                END as profile_image
-            FROM messages m
-            JOIN users su ON m.sender_id = su.id
-            JOIN users ru ON m.receiver_id = ru.id
-            WHERE m.sender_id = $1 OR m.receiver_id = $1
-            ORDER BY LEAST(m.sender_id, m.receiver_id), GREATEST(m.sender_id, m.receiver_id), m.created_at DESC
+        WITH user_messages AS (
+            SELECT DISTINCT ON (
+                LEAST(sender_id, receiver_id),
+                GREATEST(sender_id, receiver_id)
+            )
+                *,
+                CASE
+                    WHEN sender_id = $1 THEN receiver_id
+                    ELSE sender_id
+                END as other_user_id
+            FROM messages
+            WHERE sender_id = $1 OR receiver_id = $1
+            ORDER BY LEAST(sender_id, receiver_id), GREATEST(sender_id, receiver_id), created_at DESC
+        ),
+        unread_counts AS (
+            SELECT
+                sender_id as other_user_id,
+                COUNT(*) as unread_count
+            FROM messages
+            WHERE receiver_id = $1 AND is_read = FALSE
+            GROUP BY sender_id
         )
-        SELECT 
-            c.other_user_id,
-            c.username,
-            c.profile_image,
-            c.content,
-            c.created_at,
-            COUNT(m.id) as unread_count
-        FROM conversations c
-        LEFT JOIN messages m ON 
-            (LEAST(c.sender_id, c.receiver_id) = LEAST(m.sender_id, m.receiver_id) AND
-             GREATEST(c.sender_id, c.receiver_id) = GREATEST(m.sender_id, m.receiver_id))
-            AND m.receiver_id = $1 
-            AND m.is_read = FALSE
-        GROUP BY c.other_user_id, c.username, c.profile_image, c.content, c.created_at
+        SELECT
+            um.other_user_id as id,
+            u.username,
+            u.profile_image,
+            um.content as last_message,
+            um.created_at as last_message_time,
+            COALESCE(uc.unread_count, 0) as unread_count
+        FROM user_messages um
+        JOIN users u ON u.id = um.other_user_id
+        LEFT JOIN unread_counts uc ON uc.other_user_id = um.other_user_id
+        ORDER BY um.created_at DESC
         "#,
     )
     .bind(user_id)
@@ -1225,11 +1219,11 @@ pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<c
     let mut conversations = Vec::new();
     for row in rows {
         conversations.push(crate::models::Conversation {
-            id: row.try_get("other_user_id")?,
+            id: row.try_get("id")?,
             username: row.try_get("username")?,
             profile_image: row.try_get("profile_image")?,
-            last_message: row.try_get("content")?,
-            last_message_time: row.try_get::<Option<String>, _>("created_at").unwrap_or(None),
+            last_message: row.try_get("last_message")?,
+            last_message_time: row.try_get::<Option<String>, _>("last_message_time").unwrap_or(None),
             unread_count: row.try_get::<i32, _>("unread_count")?,
         });
     }

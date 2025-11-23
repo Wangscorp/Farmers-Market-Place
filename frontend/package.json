@@ -11,12 +11,15 @@
   },
   "dependencies": {
     "axios": "^1.12.2",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-image-file-resizer": "^0.4.8",
     "react-router-dom": "^7.9.3",
     "react-toastify": "^11.0.5",
-    "recharts": "^3.4.1"
+    "recharts": "^3.4.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

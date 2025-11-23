@@ -101,14 +101,57 @@ const Conversations = () => {
           {availableUsers.length === 0 ? (
             <p>No available users to chat with</p>
           ) : (
-            <div className="users-list">
+            <div className="users-cards">
               {availableUsers.map((u) => (
                 <div
                   key={u.id}
-                  className="user-item"
+                  className="user-card"
                   onClick={() => startConversation(u.id, u.username)}
                 >
-                  <p>{u.username}</p>
+                  <div className="user-card-avatar">
+                    {u.profile_image ? (
+                      <img
+                        src={
+                          u.profile_image.startsWith("data:")
+                            ? u.profile_image
+                            : `data:image/jpeg;base64,${u.profile_image}`
+                        }
+                        alt={u.username}
+                        className="user-avatar"
+                      />
+                    ) : (
+                      <div className="user-avatar-placeholder">
+                        {(u.username || "U").charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="user-card-info">
+                    <div className="user-card-header">
+                      <h4 className="user-username">{u.username}</h4>
+                      <span className={`user-role role-${u.role ? u.role.toLowerCase() : 'unknown'}`}>
+                        {u.role || 'User'}
+                      </span>
+                    </div>
+                    <div className="user-card-status">
+                      {u.is_mutual_friend ? (
+                        <span className="friend-status mutual">Friends</span>
+                      ) : u.is_followed ? (
+                        <span className="friend-status following">Following</span>
+                      ) : u.is_following_back ? (
+                        <span className="friend-status followed">Follows you</span>
+                      ) : (
+                        <span className="friend-status none">Not connected</span>
+                      )}
+                    </div>
+                    {u.is_mutual_friend && (
+                      <div className="user-contact-info">
+                        {/* Only show personal info for mutual friends */}
+                        {u.email !== null && <p className="user-email">📧 {u.email}</p>}
+                        {u.phone !== null && <p className="user-phone">📱 {u.phone}</p>}
+                        {u.location !== null && <p className="user-location">📍 {u.location}</p>}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -129,7 +172,12 @@ const Conversations = () => {
             <div
               key={conversation.id}
               className="conversation-item"
-              onClick={() => setSelectedConversation(conversation)}
+              onClick={() =>
+                setSelectedConversation({
+                  id: conversation.id,
+                  username: conversation.username,
+                })
+              }
             >
               <div className="conversation-info">
                 {conversation.profile_image ? (

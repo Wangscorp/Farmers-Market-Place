@@ -217,6 +217,73 @@ const Shipping = () => {
                       </p>
                     </div>
 
+                    {/* Order Tracking Timeline */}
+                    <div className="order-timeline">
+                      <div
+                        className={`timeline-step ${
+                          [
+                            "pending",
+                            "shipped",
+                            "delivered",
+                            "cancelled",
+                          ].includes(order.shipping_status)
+                            ? "completed"
+                            : ""
+                        }`}
+                      >
+                        <div className="timeline-icon">📦</div>
+                        <div className="timeline-content">
+                          <h4>Order Placed</h4>
+                          <p>
+                            {new Date(order.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`timeline-step ${
+                          ["shipped", "delivered"].includes(
+                            order.shipping_status
+                          )
+                            ? "completed"
+                            : order.shipping_status === "cancelled"
+                            ? "cancelled"
+                            : ""
+                        }`}
+                      >
+                        <div className="timeline-icon">🚚</div>
+                        <div className="timeline-content">
+                          <h4>Shipped</h4>
+                          <p>
+                            {order.shipping_status === "shipped" ||
+                            order.shipping_status === "delivered"
+                              ? "In transit"
+                              : "Pending"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`timeline-step ${
+                          order.shipping_status === "delivered"
+                            ? "completed"
+                            : order.shipping_status === "cancelled"
+                            ? "cancelled"
+                            : ""
+                        }`}
+                      >
+                        <div className="timeline-icon">✓</div>
+                        <div className="timeline-content">
+                          <h4>Delivered</h4>
+                          <p>
+                            {order.shipping_status === "delivered"
+                              ? new Date(order.updated_at).toLocaleDateString()
+                              : "Pending"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     {/* Delivery Verification Alert */}
                     {order.shipping_status === "delivered" &&
                       order.verification_requested_at &&

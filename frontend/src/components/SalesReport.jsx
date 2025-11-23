@@ -14,6 +14,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { toast } from "react-toastify";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import * as XLSX from "xlsx";
 import "./SalesReport.css";
 
 const COLORS = [
@@ -47,6 +50,71 @@ const SalesReport = () => {
     }
   };
 
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+
+    doc.setFontSize(20);
+    doc.text("Sales Report", 14, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
+    doc.text(`Total Sales: KES ${report.total_sales.toFixed(2)}`, 14, 38);
+    doc.text(`Total Orders: ${report.total_orders}`, 14, 46);
+    doc.text(`Total Profit: KES ${report.total_profit.toFixed(2)}`, 14, 54);
+
+    if (report.sales_by_product && report.sales_by_product.length > 0) {
+      doc.text("Product Sales Details", 14, 66);
+
+      const tableData = report.sales_by_product.map((product) => [
+        product.product_name,
+        product.quantity_sold.toString(),
+        `KES ${product.total_revenue.toFixed(2)}`,
+      ]);
+
+      doc.autoTable({
+        startY: 70,
+        head: [["Product Name", "Quantity Sold", "Total Revenue"]],
+        body: tableData,
+        theme: "grid",
+        headStyles: { fillColor: [76, 175, 80] },
+      });
+    }
+
+    doc.save(`sales-report-${new Date().toISOString().split("T")[0]}.pdf`);
+    toast.success("PDF downloaded successfully!");
+  };
+
+  const downloadExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    const summaryData = [
+      ["Sales Report Summary"],
+      ["Generated", new Date().toLocaleDateString()],
+      [""],
+      ["Total Sales", `KES ${report.total_sales.toFixed(2)}`],
+      ["Total Orders", report.total_orders],
+      ["Total Profit", `KES ${report.total_profit.toFixed(2)}`],
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+
+    if (report.sales_by_product && report.sales_by_product.length > 0) {
+      const productData = report.sales_by_product.map((product) => ({
+        "Product Name": product.product_name,
+        "Quantity Sold": product.quantity_sold,
+        "Total Revenue (KES)": product.total_revenue.toFixed(2),
+      }));
+      const productSheet = XLSX.utils.json_to_sheet(productData);
+      XLSX.utils.book_append_sheet(wb, productSheet, "Product Sales");
+    }
+
+    XLSX.writeFile(
+      wb,
+      `sales-report-${new Date().toISOString().split("T")[0]}.xlsx`
+    );
+    toast.success("Excel file downloaded successfully!");
+  };
+
   if (loading) {
     return (
       <div className="sales-report">
@@ -67,7 +135,17 @@ const SalesReport = () => {
 
   return (
     <div className="sales-report">
-      <h2>Sales Analytics</h2>
+      <div className="report-header">
+        <h2>Sales Analytics</h2>
+        <div className="download-buttons">
+          <button onClick={downloadPDF} className="download-btn pdf-btn">
+            📄 Download PDF
+          </button>
+          <button onClick={downloadExcel} className="download-btn excel-btn">
+            📊 Download Excel
+          </button>
+        </div>
+      </div>
 
       <div className="summary-cards">
         <div className="summary-card">

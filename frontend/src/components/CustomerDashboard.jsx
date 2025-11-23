@@ -181,7 +181,19 @@ const CustomerDashboard = () => {
   };
 
   if (!user) {
-    return <div>Please log in to access your dashboard.</div>;
+    return (
+      <div className="dashboard-message">
+        <div className="message-icon">🔒</div>
+        <h2>Authentication Required</h2>
+        <p>Please log in to access your customer dashboard</p>
+        <button
+          className="btn-primary"
+          onClick={() => (window.location.href = "/auth")}
+        >
+          Go to Login
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -424,9 +436,18 @@ const CustomerDashboard = () => {
         <div className="dashboard-section">
           <h2>Recent Conversations</h2>
           {loading ? (
-            <p>Loading conversations...</p>
+            <div className="loading-state">
+              <div className="spinner"></div>
+              <p>Loading conversations...</p>
+            </div>
           ) : conversations.length === 0 ? (
-            <p>No conversations yet. Start chatting with vendors!</p>
+            <div className="empty-state">
+              <div className="empty-icon">💬</div>
+              <p>No conversations yet</p>
+              <p className="empty-hint">
+                Start chatting with vendors to get support or ask questions!
+              </p>
+            </div>
           ) : (
             <div className="conversations-list">
               {conversations.map((conversation) => {
