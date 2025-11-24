@@ -23,7 +23,7 @@ pub async fn init_db() -> PgPool {
     // NOTE: Schema creation/migration code has been commented out since tables already exist.
     // If you need to recreate the schema, run the SQL scripts manually or uncomment below.
     
-    /* SCHEMA CREATION DISABLED - Tables already exist
+    // SCHEMA CREATION - Creating all required tables
     // Create users table if not exists
     sqlx::query(
         r#"
@@ -150,20 +150,113 @@ pub async fn init_db() -> PgPool {
     .await
     .expect("Failed to create shipping_orders table");
 
+    // Create cart_items table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS cart_items (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            quantity INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, product_id)
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create cart_items table");
+
+    // Create messages table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create messages table");
+
+    // Create follows table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS follows (
+            id SERIAL PRIMARY KEY,
+            follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            vendor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(follower_id, vendor_id)
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create follows table");
+
+    // Create payment_transactions table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS payment_transactions (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            checkout_request_id VARCHAR(255) NOT NULL,
+            merchant_request_id VARCHAR(255) NOT NULL,
+            mpesa_receipt_number VARCHAR(255),
+            phone_number VARCHAR(20) NOT NULL,
+            amount DECIMAL(10,2) NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'initiated',
+            transaction_date TIMESTAMP WITH TIME ZONE,
+            cart_item_ids TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create payment_transactions table");
+
+    // Create vendor_reports table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS vendor_reports (
+            id SERIAL PRIMARY KEY,
+            customer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            vendor_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+            report_type VARCHAR(100) NOT NULL,
+            description TEXT,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending',
+            admin_notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create vendor_reports table");
+
     // Add quantity column to existing products table if it doesn't exist
     let _ = sqlx::query(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 0"
     )
-    */
-    
-    // Schema already exists - skip all CREATE/ALTER statements
+    .execute(&pool)
+    .await;
     
     pool
 }
 
 /// Create a new user and return the created `User` record.
 /// Passwords are hashed before insertion.
-pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &str, role: &Role, profile_image: Option<&str>, location_string: Option<&str>) -> Result<User, sqlx::Error> {
+pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &str, role: &Role, profile_image: Option<&str>, location_string: Option<&str>, mpesa_number: Option<&str>) -> Result<User, sqlx::Error> {
     let password_hash = hash(password, DEFAULT_COST).map_err(|_| sqlx::Error::RowNotFound)?;
     let role_str = match role {
         Role::Admin => "Admin",
@@ -177,9 +270,9 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
     let row = if let Some(image) = profile_image {
         sqlx::query(
             r#"
-            INSERT INTO users (username, email, password_hash, role, profile_image, verified, location_string)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING id, username, email, role, profile_image, verified, location_string
+            INSERT INTO users (username, email, password_hash, role, profile_image, verified, location_string, mpesa_number)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            RETURNING id, username, email, role, profile_image, verified, location_string, mpesa_number
             "#,
         )
         .bind(username)
@@ -189,14 +282,15 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(image)
         .bind(verified)  // Customers auto-verified, Vendors need admin verification
         .bind(location_string)
+        .bind(mpesa_number)
         .fetch_one(pool)
         .await?
     } else {
         sqlx::query(
             r#"
-            INSERT INTO users (username, email, password_hash, role, verified, location_string)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id, username, email, role, profile_image, verified, location_string
+            INSERT INTO users (username, email, password_hash, role, verified, location_string, mpesa_number)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id, username, email, role, profile_image, verified, location_string, mpesa_number
             "#,
         )
         .bind(username)
@@ -205,6 +299,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         .bind(role_str)
         .bind(verified)  // Customers auto-verified, Vendors need admin verification
         .bind(location_string)
+        .bind(mpesa_number)
         .fetch_one(pool)
         .await?
     };
@@ -224,7 +319,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         banned: false,
         verification_document: None,
         secondary_email: None,
-        mpesa_number: None,
+        mpesa_number: row.try_get(7)?,
         payment_preference: None,
         location_string: row.try_get(6).ok(),
         wallet_balance: 0.0,
@@ -237,7 +332,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
 pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) -> Result<User, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT id, username, email, password_hash, role, profile_image, verified, banned
+        SELECT id, username, email, password_hash, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance
         FROM users
         WHERE username = $1
         "#,
@@ -273,11 +368,11 @@ pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) ->
         verified: row.try_get(6)?,
         banned: row.try_get(7)?,
         verification_document: None,
-        secondary_email: None,
-        mpesa_number: None,
-        payment_preference: None,
-        location_string: None,
-        wallet_balance: 0.0, // Will be loaded separately if needed
+        secondary_email: row.try_get(8)?,
+        mpesa_number: row.try_get(9)?,
+        payment_preference: row.try_get(10)?,
+        location_string: row.try_get(11)?,
+        wallet_balance: row.try_get(12).unwrap_or(0.0),
     };
 
     Ok(user)
@@ -351,23 +446,7 @@ pub async fn get_user_verification_document(pool: &PgPool, user_id: i32) -> Resu
 }
 
 use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize)]
-pub struct VendorReport {
-    pub id: i32,
-    pub customer_id: i32,
-    pub vendor_id: i32,
-    pub product_id: Option<i32>,
-    pub report_type: String,
-    pub description: Option<String>,
-    pub status: String,
-    pub admin_notes: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
-    pub customer_username: String,
-    pub vendor_username: String,
-    pub product_name: Option<String>,
-}
+use crate::models::VendorReport;
 
 pub async fn create_vendor_report(
     pool: &PgPool,
@@ -1224,7 +1303,7 @@ pub async fn get_user_conversations(pool: &PgPool, user_id: i32) -> Result<Vec<c
             profile_image: row.try_get("profile_image")?,
             last_message: row.try_get("last_message")?,
             last_message_time: row.try_get::<Option<String>, _>("last_message_time").unwrap_or(None),
-            unread_count: row.try_get::<i32, _>("unread_count")?,
+            unread_count: row.try_get::<i64, _>("unread_count")? as i32,
         });
     }
 

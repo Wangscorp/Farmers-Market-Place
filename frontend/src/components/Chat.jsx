@@ -4,206 +4,243 @@ import axios from "../api";
 import { useUser } from "../hooks/useUser";
 import "./Chat.css";
 
-const Chat = ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
-  const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const messagesEndRef = useRef(null);
-  const { user } = useUser();
-  const pollIntervalRef = useRef(null);
+const Chat = React.memo(
+  ({ otherUserId, otherUsername, onClose, onMessageSent }) => {
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const messagesEndRef = useRef(null);
+    const { user } = useUser();
+    const pollIntervalRef = useRef(null);
 
-  const loadMessages = useCallback(async () => {
-    if (!otherUserId) return;
+    const loadMessages = useCallback(async () => {
+      if (!otherUserId) return;
 
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await axios.get(`/messages/${otherUserId}`);
-      setMessages(response.data || []);
-
-      // Mark messages as read
       try {
-        await axios.patch(`/messages/${otherUserId}/read`);
-      } catch (readError) {
-        console.warn("Failed to mark messages as read:", readError);
-        // Don't fail the whole operation if marking as read fails
+        // Only show loading on first load
+        const isFirstLoad = messages.length === 0;
+        if (isFirstLoad) {
+          setLoading(true);
+        }
+        setError(null);
+        const response = await axios.get(`/messages/${otherUserId}`);
+        const newMessages = response.data || [];
+
+        // Only update if messages actually changed to prevent unnecessary re-renders
+        setMessages((prevMessages) => {
+          if (JSON.stringify(prevMessages) !== JSON.stringify(newMessages)) {
+            return newMessages;
+          }
+          return prevMessages;
+        });
+
+        // Mark messages as read
+        try {
+          await axios.patch(`/messages/${otherUserId}/read`);
+        } catch (readError) {
+          console.warn("Failed to mark messages as read:", readError);
+          // Don't fail the whole operation if marking as read fails
+        }
+      } catch (error) {
+        console.error("Error loading messages:", error);
+        setError("Failed to load messages. Please try again.");
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error loading messages:", error);
-      setError("Failed to load messages. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [otherUserId]);
+    }, [otherUserId, messages.length]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  // Set up polling to refresh messages every 3 seconds
-  useEffect(() => {
-    loadMessages();
-
-    pollIntervalRef.current = setInterval(() => {
-      loadMessages();
-    }, 3000);
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
+    const scrollToBottom = () => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
       }
     };
-  }, [otherUserId, loadMessages]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    const isUserNearBottom = () => {
+      const container = messagesEndRef.current?.parentElement;
+      if (!container) return true;
 
-  const sendMessage = async (e) => {
-    e.preventDefault();
+      const threshold = 100; // pixels from bottom
+      return (
+        container.scrollHeight - container.scrollTop - container.clientHeight <
+        threshold
+      );
+    };
 
-    if (!newMessage.trim() || !otherUserId) return;
+    // Set up polling to refresh messages every 5 seconds (reduced frequency)
+    useEffect(() => {
+      loadMessages();
 
-    const messageContent = newMessage.trim();
-    setNewMessage("");
+      pollIntervalRef.current = setInterval(() => {
+        loadMessages();
+      }, 5000);
 
-    try {
-      // Add the sent message to the list immediately for better UX
-      const optimisticMessage = {
-        id: Date.now(), // Temporary ID
-        sender_id: user.id,
-        receiver_id: otherUserId,
-        content: messageContent,
-        created_at: new Date().toISOString(),
+      return () => {
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current);
+        }
       };
-      setMessages((prev) => [...prev, optimisticMessage]);
+    }, [otherUserId, loadMessages]);
 
-      const response = await axios.post("/messages", {
-        receiver_id: otherUserId,
-        content: messageContent,
-      });
-
-      if (response.data) {
-        // Replace the optimistic message with the real one from the server
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === optimisticMessage.id ? response.data : msg
-          )
-        );
+    // Smart scroll behavior - only scroll if user is near bottom or it's the first load
+    useEffect(() => {
+      const shouldScroll =
+        messages.length > 0 && (loading || isUserNearBottom());
+      if (shouldScroll) {
+        // Use setTimeout to ensure DOM has updated
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
       }
+    }, [messages.length, loading]); // Depend on length and loading state
 
-      // Notify parent component that a message was sent
-      if (onMessageSent) {
-        onMessageSent();
+    const sendMessage = async (e) => {
+      e.preventDefault();
+
+      if (!newMessage.trim() || !otherUserId) return;
+
+      const messageContent = newMessage.trim();
+      setNewMessage("");
+
+      try {
+        // Add the sent message to the list immediately for better UX
+        const optimisticMessage = {
+          id: Date.now(), // Temporary ID
+          sender_id: user.id,
+          receiver_id: otherUserId,
+          content: messageContent,
+          created_at: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, optimisticMessage]);
+
+        const response = await axios.post("/messages", {
+          receiver_id: otherUserId,
+          content: messageContent,
+        });
+
+        if (response.data) {
+          // Replace the optimistic message with the real one from the server
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === optimisticMessage.id ? response.data : msg
+            )
+          );
+        }
+
+        // Notify parent component that a message was sent
+        if (onMessageSent) {
+          onMessageSent();
+        }
+      } catch (error) {
+        console.error("Error sending message:", error);
+        // Restore the message if sending failed
+        setNewMessage(messageContent);
+        toast.error("Failed to send message. Please try again.");
       }
-    } catch (error) {
-      console.error("Error sending message:", error);
-      // Restore the message if sending failed
-      setNewMessage(messageContent);
-      toast.error("Failed to send message. Please try again.");
-    }
-  };
+    };
 
-  const formatTime = (timestamp) => {
-    if (!timestamp) {
-      return new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-    try {
-      // Handle ISO 8601 format and other common formats
-      const date = new Date(timestamp);
-      if (isNaN(date.getTime())) {
-        // If the date is invalid, use current time
+    const formatTime = (timestamp) => {
+      if (!timestamp) {
         return new Date().toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         });
       }
-      return date.toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch (error) {
-      console.error("Error formatting time:", timestamp, error);
-      return new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    }
-  };
+      try {
+        // Handle ISO 8601 format and other common formats
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) {
+          // If the date is invalid, use current time
+          return new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        }
+        return date.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      } catch (error) {
+        console.error("Error formatting time:", timestamp, error);
+        return new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+    };
 
-  if (!user) {
+    if (!user) {
+      return (
+        <div className="chat-container">
+          <div className="chat-header">
+            <h3>Please log in to use chat</h3>
+            <button onClick={onClose} className="close-btn">
+              ×
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="chat-container">
         <div className="chat-header">
-          <h3>Please log in to use chat</h3>
+          <h3>Chat with {otherUsername}</h3>
           <button onClick={onClose} className="close-btn">
             ×
           </button>
         </div>
+
+        <div className="messages-container">
+          {error && <div className="error-message">{error}</div>}
+          {loading ? (
+            <div className="loading">Loading messages...</div>
+          ) : messages.length === 0 ? (
+            <div className="no-messages">
+              No messages yet. Start the conversation!
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`message ${
+                  message.sender_id === user.id ? "sent" : "received"
+                }`}
+              >
+                <div className="message-content">
+                  <p>{message.content}</p>
+                  <span className="message-time">
+                    {formatTime(message.created_at)}
+                  </span>
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        <form onSubmit={sendMessage} className="message-form">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder="Type your message..."
+            className="message-input"
+            maxLength={500}
+          />
+          <button
+            type="submit"
+            disabled={!newMessage.trim()}
+            className="send-btn"
+          >
+            Send
+          </button>
+        </form>
       </div>
     );
   }
+);
 
-  return (
-    <div className="chat-container">
-      <div className="chat-header">
-        <h3>Chat with {otherUsername}</h3>
-        <button onClick={onClose} className="close-btn">
-          ×
-        </button>
-      </div>
-
-      <div className="messages-container">
-        {error && <div className="error-message">{error}</div>}
-        {loading ? (
-          <div className="loading">Loading messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="no-messages">
-            No messages yet. Start the conversation!
-          </div>
-        ) : (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className={`message ${
-                message.sender_id === user.id ? "sent" : "received"
-              }`}
-            >
-              <div className="message-content">
-                <p>{message.content}</p>
-                <span className="message-time">
-                  {formatTime(message.created_at)}
-                </span>
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <form onSubmit={sendMessage} className="message-form">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type your message..."
-          className="message-input"
-          maxLength={500}
-        />
-        <button
-          type="submit"
-          disabled={!newMessage.trim()}
-          className="send-btn"
-        >
-          Send
-        </button>
-      </form>
-    </div>
-  );
-};
+Chat.displayName = "Chat";
 
 export default Chat;

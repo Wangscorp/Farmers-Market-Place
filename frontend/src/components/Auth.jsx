@@ -25,6 +25,7 @@ const Auth = () => {
   const [resizedImage, setResizedImage] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [location, setLocation] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [passwordErrors, setPasswordErrors] = useState([]);
 
   // Submit login request and update user context on success
@@ -93,11 +94,28 @@ const Auth = () => {
       return;
     }
 
+    // Validate phone number input
+    if (!phoneNumber.trim()) {
+      toast.warning("Please enter your phone number");
+      return;
+    }
+    if (phoneNumber.length < 10 || phoneNumber.length > 15) {
+      toast.warning("Phone number must be between 10 and 15 digits");
+      return;
+    }
+    if (!phoneNumber.match(/^[+]?[0-9]+$/)) {
+      toast.warning(
+        "Phone number must contain only numbers and optionally start with +"
+      );
+      return;
+    }
+
     try {
       const signupData = {
         username,
         email,
         password,
+        mpesa_number: phoneNumber.trim(),
         role,
         profile_image: resizedImage,
         location_string: location.trim(),
@@ -163,6 +181,9 @@ const Auth = () => {
     setConfirmPassword("");
     setRole("Customer");
     setResizedImage(null);
+    setLocation("");
+    setPhoneNumber("");
+    setPasswordErrors([]);
   };
 
   return (
@@ -232,6 +253,14 @@ const Auth = () => {
             placeholder="Enter your location (e.g., Nairobi, Kenya)"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
+            style={{ marginTop: "0.5rem" }}
+          />
+
+          <input
+            type="tel"
+            placeholder="Phone number (e.g., +254712345678)"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
             style={{ marginTop: "0.5rem" }}
           />
 

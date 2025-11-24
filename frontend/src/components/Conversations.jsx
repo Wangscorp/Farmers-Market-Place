@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "../api";
 import { useUser } from "../hooks/useUser";
 import Chat from "./Chat";
 import "./Conversations.css";
 
-const Conversations = () => {
+const Conversations = React.memo(() => {
   const { user } = useUser();
   const [conversations, setConversations] = useState([]);
   const [availableUsers, setAvailableUsers] = useState([]);
@@ -17,11 +17,24 @@ const Conversations = () => {
     if (user) {
       loadConversations();
       loadAvailableUsers();
+    }
+  }, [user]);
 
-      // Set up auto-refresh every 5 seconds
+  // Handle polling when conversation selection changes
+  useEffect(() => {
+    if (selectedConversation) {
+      // Stop polling when in a conversation
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    } else if (user) {
+      // Resume polling when not in a conversation
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
       pollIntervalRef.current = setInterval(() => {
         loadConversations();
-      }, 5000);
+      }, 10000);
     }
 
     return () => {
@@ -29,19 +42,29 @@ const Conversations = () => {
         clearInterval(pollIntervalRef.current);
       }
     };
-  }, [user]);
+  }, [selectedConversation, user]);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get("/messages");
-      setConversations(response.data || []);
+      const newConversations = response.data || [];
+
+      // Only update state if conversations actually changed
+      setConversations((prevConversations) => {
+        if (
+          JSON.stringify(prevConversations) !== JSON.stringify(newConversations)
+        ) {
+          return newConversations;
+        }
+        return prevConversations;
+      });
     } catch (error) {
       console.error("Error loading conversations:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const loadAvailableUsers = async () => {
     try {
@@ -54,6 +77,11 @@ const Conversations = () => {
   };
 
   const startConversation = (userId, username) => {
+    // Clear any active polling when starting a conversation
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+    }
+
     setSelectedConversation({
       id: userId,
       username: username,
@@ -77,9 +105,15 @@ const Conversations = () => {
           otherUsername={selectedConversation.username}
           onClose={() => {
             setSelectedConversation(null);
+            // Force refresh conversations when closing chat
+            setTimeout(() => {
+              loadConversations();
+            }, 200);
+          }}
+          onMessageSent={() => {
+            // Only refresh if not in conversation to prevent jumping
             loadConversations();
           }}
-          onMessageSent={loadConversations}
         />
       </div>
     );
@@ -128,27 +162,43 @@ const Conversations = () => {
                   <div className="user-card-info">
                     <div className="user-card-header">
                       <h4 className="user-username">{u.username}</h4>
-                      <span className={`user-role role-${u.role ? u.role.toLowerCase() : 'unknown'}`}>
-                        {u.role || 'User'}
+                      <span
+                        className={`user-role role-${
+                          u.role ? u.role.toLowerCase() : "unknown"
+                        }`}
+                      >
+                        {u.role || "User"}
                       </span>
                     </div>
                     <div className="user-card-status">
                       {u.is_mutual_friend ? (
                         <span className="friend-status mutual">Friends</span>
                       ) : u.is_followed ? (
-                        <span className="friend-status following">Following</span>
+                        <span className="friend-status following">
+                          Following
+                        </span>
                       ) : u.is_following_back ? (
-                        <span className="friend-status followed">Follows you</span>
+                        <span className="friend-status followed">
+                          Follows you
+                        </span>
                       ) : (
-                        <span className="friend-status none">Not connected</span>
+                        <span className="friend-status none">
+                          Not connected
+                        </span>
                       )}
                     </div>
                     {u.is_mutual_friend && (
                       <div className="user-contact-info">
                         {/* Only show personal info for mutual friends */}
-                        {u.email !== null && <p className="user-email">📧 {u.email}</p>}
-                        {u.phone !== null && <p className="user-phone">📱 {u.phone}</p>}
-                        {u.location !== null && <p className="user-location">📍 {u.location}</p>}
+                        {u.email !== null && (
+                          <p className="user-email">📧 {u.email}</p>
+                        )}
+                        {u.phone !== null && (
+                          <p className="user-phone">📱 {u.phone}</p>
+                        )}
+                        {u.location !== null && (
+                          <p className="user-location">📍 {u.location}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -218,6 +268,8 @@ const Conversations = () => {
       )}
     </div>
   );
-};
+});
+
+Conversations.displayName = "Conversations";
 
 export default Conversations;

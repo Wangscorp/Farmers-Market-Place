@@ -147,6 +147,17 @@ async fn login(pool: web::Data<PgPool>, req: web::Json<LoginRequest>) -> ActixRe
  */
 #[post("/signup")]
 async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> ActixResult<HttpResponse> {
+    // Validate phone number requirements
+    if req.mpesa_number.trim().is_empty() {
+        return Ok(HttpResponse::BadRequest().json("Phone number is required"));
+    }
+    if req.mpesa_number.len() < 10 || req.mpesa_number.len() > 15 {
+        return Ok(HttpResponse::BadRequest().json("Phone number must be between 10 and 15 digits"));
+    }
+    if !req.mpesa_number.chars().all(|c| c.is_numeric() || c == '+') {
+        return Ok(HttpResponse::BadRequest().json("Phone number must contain only numbers and optionally start with +"));
+    }
+
     // Validate password requirements
     if req.password.len() < 8 {
         return Ok(HttpResponse::BadRequest().json("Password must be at least 8 characters"));
@@ -171,7 +182,7 @@ async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> Actix
     };
 
     // Attempt to create new user in database
-    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.location_string.as_deref()).await {
+    match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.location_string.as_deref(), Some(&req.mpesa_number)).await {
         Ok(user) => Ok(HttpResponse::Created().json(user)),           // 201 Created with user data
         // Handle unique constraint violations (duplicate username/email)
         Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
@@ -197,14 +208,7 @@ use actix_web::http::header::AUTHORIZATION;
 #[get("/cart")]
 async fn get_cart(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> ActixResult<HttpResponse> {
     let user_id = match extract_auth(&req) {
-        Ok(claims) => {
-            // Allow both customers and vendors to access cart
-            if claims.role == "Customer" || claims.role == "Vendor" {
-                claims.sub
-            } else {
-                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
-            }
-        },
+        Ok(claims) => claims.sub,
         Err(response) => return Ok(response),
     };
 
@@ -228,14 +232,7 @@ async fn get_cart(req: actix_web::HttpRequest, pool: web::Data<PgPool>) -> Actix
 #[post("/cart")]
 async fn add_to_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>, cart_req: web::Json<CartItemRequest>) -> ActixResult<HttpResponse> {
     let user_id = match extract_auth(&req) {
-        Ok(claims) => {
-            // Allow both customers and vendors to add to cart
-            if claims.role == "Customer" || claims.role == "Vendor" {
-                claims.sub
-            } else {
-                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
-            }
-        },
+        Ok(claims) => claims.sub,
         Err(response) => return Ok(response),
     };
 
@@ -260,14 +257,7 @@ async fn add_to_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>,
 #[patch("/cart/{item_id}")]
 async fn update_cart_item(req: actix_web::HttpRequest, pool: web::Data<PgPool>, item_id: web::Path<i32>, update_req: web::Json<UpdateCartItemRequest>) -> ActixResult<HttpResponse> {
     let user_id = match extract_auth(&req) {
-        Ok(claims) => {
-            // Allow both customers and vendors to update cart
-            if claims.role == "Customer" || claims.role == "Vendor" {
-                claims.sub
-            } else {
-                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
-            }
-        },
+        Ok(claims) => claims.sub,
         Err(response) => return Ok(response),
     };
 
@@ -291,14 +281,7 @@ async fn update_cart_item(req: actix_web::HttpRequest, pool: web::Data<PgPool>, 
 #[delete("/cart/{item_id}")]
 async fn remove_from_cart_route(req: actix_web::HttpRequest, pool: web::Data<PgPool>, item_id: web::Path<i32>) -> ActixResult<HttpResponse> {
     let user_id = match extract_auth(&req) {
-        Ok(claims) => {
-            // Allow both customers and vendors to remove from cart
-            if claims.role == "Customer" || claims.role == "Vendor" {
-                claims.sub
-            } else {
-                return Ok(HttpResponse::Forbidden().json("Cart access requires Customer or Vendor role"));
-            }
-        },
+        Ok(claims) => claims.sub,
         Err(response) => return Ok(response),
     };
 
@@ -336,8 +319,8 @@ fn get_mpesa_client() -> Option<&'static MpesaClient> {
  */
 #[post("/checkout")]
 async fn checkout(req: actix_web::HttpRequest, pool: web::Data<PgPool>, checkout_req: web::Json<CheckoutRequest>) -> ActixResult<HttpResponse> {
-    let user_id = match check_customer_auth(&req) {
-        Ok(id) => id,
+    let user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
         Err(response) => return Ok(response),
     };
 
@@ -1545,7 +1528,7 @@ async fn get_user_conversations_route(
     match db::get_user_conversations(&pool, user_id).await {
         Ok(conversations) => Ok(HttpResponse::Ok().json(conversations)),
         Err(e) => {
-            eprintln!("Database error in get_user_conversations: {:?}", e);
+            eprintln!("Failed to fetch conversations for user {}: {:?}", user_id, e);
             Ok(HttpResponse::InternalServerError().json("Failed to fetch conversations"))
         },
     }
@@ -2429,7 +2412,10 @@ pub struct ChatbotRequest {
 async fn chatbot_handler(req: web::Json<ChatbotRequest>) -> ActixResult<HttpResponse> {
     match gemini::get_gemini_response(&req.prompt).await {
         Ok(response) => Ok(HttpResponse::Ok().json(json!({ "response": response }))),
-        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to get response from chatbot")),
+        Err(e) => {
+            eprintln!("Chatbot error: {}", e);
+            Ok(HttpResponse::InternalServerError().json("Failed to get response from chatbot"))
+        }
     }
 }
 

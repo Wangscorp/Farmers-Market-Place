@@ -35,7 +35,6 @@ struct Candidate {
 #[derive(Deserialize, Debug)]
 struct ContentResponse {
     parts: Vec<PartResponse>,
-    role: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -44,9 +43,14 @@ struct PartResponse {
 }
 
 /// Get a response from the Gemini Pro model.
-pub async fn get_gemini_response(prompt: &str) -> Result<String, reqwest::Error> {
-    let api_key = env::var("GEMINI_API_KEY").expect("GEMINI_API_KEY must be set");
-    let model = "gemini-pro:generateContent";
+pub async fn get_gemini_response(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let api_key = match env::var("GEMINI_API_KEY") {
+        Ok(key) => key,
+        Err(_) => {
+            return Ok("I'm sorry, but the AI chatbot is currently unavailable. The administrator needs to configure the Gemini API key. Please try again later or contact support for assistance.".to_string());
+        }
+    };
+    let model = "gemini-1.5-flash:generateContent";
     let url = format!("{}{}", GEMINI_API_BASE_URL, model);
 
     let client = reqwest::Client::new();
@@ -65,10 +69,12 @@ pub async fn get_gemini_response(prompt: &str) -> Result<String, reqwest::Error>
         .query(&[("key", &api_key)])
         .json(&request_body)
         .send()
-        .await?;
+        .await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
     if res.status().is_success() {
-        let gemini_response: GeminiResponse = res.json().await?;
+        let gemini_response: GeminiResponse = res.json().await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         if let Some(candidate) = gemini_response.candidates.get(0) {
             if let Some(part) = candidate.content.parts.get(0) {
                 return Ok(part.text.clone());
@@ -76,7 +82,8 @@ pub async fn get_gemini_response(prompt: &str) -> Result<String, reqwest::Error>
         }
         Ok("No response from Gemini.".to_string())
     } else {
-        let error_body = res.text().await?;
+        let error_body = res.text().await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
         eprintln!("Gemini API Error: {}", error_body);
         Ok(format!("Error: {}", error_body))
     }

@@ -52,6 +52,7 @@ pub struct SignupRequest {
     pub username: String,
     pub email: String,
     pub password: String,
+    pub mpesa_number: String, // Phone number is now required
     pub role: Option<String>, // "Customer" or "Vendor", defaults to "Customer"
     pub profile_image: Option<String>, // Base64 encoded image
     pub location_string: Option<String>,
@@ -268,6 +269,23 @@ impl Claims {
             exp: expiration,
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VendorReport {
+    pub id: i32,
+    pub customer_id: i32,
+    pub vendor_id: i32,
+    pub product_id: Option<i32>,
+    pub report_type: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub admin_notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub customer_username: String,
+    pub vendor_username: String,
+    pub product_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

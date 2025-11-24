@@ -96,17 +96,8 @@ const CustomerDashboard = () => {
   };
 
   const openChat = (conversation) => {
-    // Find the other user in the conversation
-    const otherUserId =
-      conversation.sender_id === user.id
-        ? conversation.receiver_id
-        : conversation.sender_id;
-    const otherUsername =
-      conversation.sender_id === user.id
-        ? conversation.receiver_username
-        : conversation.sender_username;
-
-    setSelectedChat({ id: otherUserId, username: otherUsername });
+    // The conversation object contains the other user's information
+    setSelectedChat({ id: conversation.id, username: conversation.username });
   };
 
   const closeChat = () => {
@@ -417,10 +408,8 @@ const CustomerDashboard = () => {
                   <button
                     onClick={() =>
                       openChat({
-                        sender_id: user.id,
-                        receiver_id: follow.vendor_id,
-                        sender_username: user.username,
-                        receiver_username: follow.vendor_username,
+                        id: follow.vendor_id,
+                        username: follow.vendor_username,
                       })
                     }
                     className="chat-btn-small"
@@ -451,27 +440,27 @@ const CustomerDashboard = () => {
           ) : (
             <div className="conversations-list">
               {conversations.map((conversation) => {
-                const otherUsername =
-                  conversation.sender_id === user.id
-                    ? conversation.receiver_username
-                    : conversation.sender_username;
-
                 return (
                   <div
-                    key={`${conversation.sender_id}-${conversation.receiver_id}`}
+                    key={conversation.id}
                     className="conversation-item"
                     onClick={() => openChat(conversation)}
                   >
                     <div className="conversation-info">
-                      <h4>{otherUsername}</h4>
+                      <h4>{conversation.username}</h4>
                       <p className="last-message">
-                        {conversation.content.length > 50
-                          ? `${conversation.content.substring(0, 50)}...`
-                          : conversation.content}
+                        {conversation.last_message &&
+                        conversation.last_message.length > 50
+                          ? `${conversation.last_message.substring(0, 50)}...`
+                          : conversation.last_message || "No messages yet"}
                       </p>
                     </div>
                     <div className="conversation-time">
-                      {new Date(conversation.created_at).toLocaleDateString()}
+                      {conversation.last_message_time
+                        ? new Date(
+                            conversation.last_message_time
+                          ).toLocaleDateString()
+                        : ""}
                     </div>
                   </div>
                 );
