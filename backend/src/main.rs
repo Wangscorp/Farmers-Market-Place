@@ -10,6 +10,7 @@ mod models;
 mod routes;
 mod mpesa;
 mod gemini;
+mod email;
 
 /// Entry point: initializes database and starts HTTP server on port 8080.
 #[actix_web::main]

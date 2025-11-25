@@ -38,6 +38,37 @@
   color: #fff;
 }
 
+.rejection-notice {
+  background: rgba(255, 107, 107, 0.2);
+  border: 2px solid #ff6b6b;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.rejection-icon {
+  font-size: 3rem;
+  flex-shrink: 0;
+}
+
+.rejection-message h4 {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.rejection-message p {
+  margin: 5px 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #fff;
+  opacity: 0.95;
+}
+
 .verification-description {
   font-size: 0.95rem;
   line-height: 1.6;
@@ -288,5 +319,26 @@
     padding: 10px 12px;
     margin: 12px 0;
     font-size: 0.85rem;
+  }
+
+  .rejection-notice {
+    padding: 12px;
+    margin-bottom: 15px;
+  }
+
+  .rejection-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+
+  .rejection-message h4 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+
+  .rejection-message p {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 5px 0;
   }
 }

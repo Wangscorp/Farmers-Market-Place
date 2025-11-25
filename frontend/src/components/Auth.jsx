@@ -28,6 +28,15 @@ const Auth = () => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [passwordErrors, setPasswordErrors] = useState([]);
 
+  // Password reset states
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1: username, 2: verify code
+  const [resetUsername, setResetUsername] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+
   // Submit login request and update user context on success
   const handleLogin = async () => {
     try {
@@ -37,6 +46,17 @@ const Auth = () => {
         password,
       });
       console.log("[Auth] Login response:", response.data);
+
+      // Check if user has a verification rejection reason
+      const user = response.data.user;
+      if (user && user.verification_rejected_reason) {
+        toast.error(user.verification_rejected_reason, {
+          autoClose: 8000, // Show for 8 seconds
+        });
+        // Don't redirect, stay on login page so they can re-upload verification
+        return;
+      }
+
       // Update global user state with returned user data
       login(response.data);
       // Load cart items after successful login
@@ -184,7 +204,245 @@ const Auth = () => {
     setLocation("");
     setPhoneNumber("");
     setPasswordErrors([]);
+    // Reset password reset fields
+    setShowPasswordReset(false);
+    setResetStep(1);
+    setResetUsername("");
+    setVerificationCode("");
+    setNewPassword("");
+    setConfirmNewPassword("");
   };
+
+  /**
+   * Handle password reset request - Step 1: Generate verification code
+   */
+  const handlePasswordResetRequest = async () => {
+    if (!resetUsername.trim()) {
+      toast.error("Please enter your username");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await axios.post("/auth/password-reset", {
+        username: resetUsername.trim(),
+      });
+
+      toast.success("Verification code generated! Check the backend console.");
+      setResetStep(2);
+    } catch (error) {
+      console.error("[Auth] Password reset request failed:", error);
+      toast.error(
+        error.response?.data ||
+          "Failed to send verification code. Please try again."
+      );
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  /**
+   * Handle password reset verification - Step 2: Verify code and set new password
+   */
+  const handlePasswordResetVerify = async () => {
+    if (!verificationCode.trim()) {
+      toast.error("Please enter the verification code");
+      return;
+    }
+
+    if (!newPassword) {
+      toast.error("Please enter a new password");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    // Validate new password requirements
+    const pwdErrors = validatePassword(newPassword);
+    if (pwdErrors.length > 0) {
+      toast.error(
+        "Password does not meet requirements: " + pwdErrors.join(", ")
+      );
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await axios.post("/auth/password-reset/verify", {
+        username: resetUsername.trim(),
+        verification_code: verificationCode.trim(),
+        new_password: newPassword,
+      });
+
+      toast.success(
+        "Password reset successful! You can now log in with your new password."
+      );
+
+      // Reset the form and go back to login
+      setShowPasswordReset(false);
+      setResetStep(1);
+      setResetUsername("");
+      setVerificationCode("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setUsername(resetUsername); // Pre-fill username for login
+    } catch (error) {
+      console.error("[Auth] Password reset verify failed:", error);
+      toast.error(
+        error.response?.data || "Failed to reset password. Please try again."
+      );
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  /**
+   * Cancel password reset and return to login
+   */
+  const cancelPasswordReset = () => {
+    setShowPasswordReset(false);
+    setResetStep(1);
+    setResetUsername("");
+    setVerificationCode("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setResetLoading(false);
+  };
+
+  // Password Reset UI
+  if (showPasswordReset) {
+    return (
+      <div className="auth">
+        <h2>Reset Password</h2>
+
+        {resetStep === 1 && (
+          <>
+            <p
+              style={{
+                marginBottom: "1rem",
+                color: "#666",
+                fontSize: "0.9rem",
+              }}
+            >
+              Enter your username to generate a verification code
+            </p>
+            <input
+              type="text"
+              placeholder="Username"
+              value={resetUsername}
+              onChange={(e) => setResetUsername(e.target.value)}
+              style={{ marginBottom: "1rem" }}
+            />
+            <button
+              onClick={handlePasswordResetRequest}
+              disabled={resetLoading}
+              style={{ marginBottom: "1rem" }}
+            >
+              {resetLoading ? "Generating..." : "Generate Verification Code"}
+            </button>
+          </>
+        )}
+
+        {resetStep === 2 && (
+          <>
+            <p
+              style={{
+                marginBottom: "1rem",
+                color: "#666",
+                fontSize: "0.9rem",
+              }}
+            >
+              Enter the 6-digit verification code generated for '{resetUsername}
+              ' (check backend console)
+            </p>
+            <input
+              type="text"
+              placeholder="Verification code"
+              value={verificationCode}
+              onChange={(e) =>
+                setVerificationCode(
+                  e.target.value.replace(/[^0-9]/g, "").slice(0, 6)
+                )
+              }
+              maxLength={6}
+              style={{
+                marginBottom: "1rem",
+                textAlign: "center",
+                fontSize: "1.2rem",
+              }}
+            />
+
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="New password"
+              value={newPassword}
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                setPasswordErrors(validatePassword(e.target.value));
+              }}
+              style={{ marginBottom: "0.5rem" }}
+            />
+
+            <input
+              type={showPassword ? "text" : "password"}
+              placeholder="Confirm new password"
+              value={confirmNewPassword}
+              onChange={(e) => setConfirmNewPassword(e.target.value)}
+              style={{ marginBottom: "1rem" }}
+            />
+
+            {passwordErrors.length > 0 && (
+              <div
+                style={{
+                  marginBottom: "1rem",
+                  color: "#e74c3c",
+                  fontSize: "0.8rem",
+                }}
+              >
+                Password requirements:
+                <ul style={{ margin: "0.5rem 0", paddingLeft: "1.5rem" }}>
+                  {passwordErrors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <label
+              style={{
+                marginBottom: "1rem",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+                style={{ marginRight: "0.5rem" }}
+              />
+              Show Password
+            </label>
+
+            <button
+              onClick={handlePasswordResetVerify}
+              disabled={resetLoading}
+              style={{ marginBottom: "1rem" }}
+            >
+              {resetLoading ? "Resetting..." : "Reset Password"}
+            </button>
+          </>
+        )}
+
+        <button onClick={cancelPasswordReset} className="toggle-btn">
+          Back to Login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="auth">
@@ -278,6 +536,25 @@ const Auth = () => {
       <button onClick={isLogin ? handleLogin : handleSignup}>
         {isLogin ? "Login" : "Sign Up"}
       </button>
+
+      {isLogin && (
+        <button
+          onClick={() => setShowPasswordReset(true)}
+          className="forgot-password-btn"
+          style={{
+            background: "none",
+            border: "none",
+            color: "#3498db",
+            cursor: "pointer",
+            textDecoration: "underline",
+            fontSize: "0.9rem",
+            marginTop: "0.5rem",
+          }}
+        >
+          Forgot Password?
+        </button>
+      )}
+
       <button onClick={toggleMode} className="toggle-btn">
         {isLogin ? "Need an account? Sign Up" : "Have an account? Login"}
       </button>

@@ -3,13 +3,15 @@
 
 use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
-use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, VerifyDeliveryRequest, WithdrawRequest, WithdrawResponse};
-use crate::db;  // Database helper functions
+use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, VerifyDeliveryRequest, WithdrawRequest, WithdrawResponse, PasswordResetRequest, PasswordResetVerifyRequest, PasswordResetResponse};
+use crate::db;
+use crate::email;  // Database helper functions
 use crate::mpesa::{MpesaClient, MpesaConfig, StkCallbackBody, extract_callback_data, PaymentStatus};
 use crate::gemini;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::OnceLock;
+use rand;
 
 /// GET /products - Retrieve all products, optionally filtered by vendor or location.
 #[get("/products")]
@@ -184,9 +186,16 @@ async fn signup(pool: web::Data<PgPool>, req: web::Json<SignupRequest>) -> Actix
     // Attempt to create new user in database
     match db::create_user(&pool, &req.username, &req.email, &req.password, &role, req.profile_image.as_deref(), req.location_string.as_deref(), Some(&req.mpesa_number)).await {
         Ok(user) => Ok(HttpResponse::Created().json(user)),           // 201 Created with user data
-        // Handle unique constraint violations (duplicate username/email)
+        // Handle unique constraint violations (duplicate username/email/phone)
         Err(sqlx::Error::Database(db_err)) if db_err.constraint().is_some() => {
-            Ok(HttpResponse::Conflict().json("Username or email already exists"))  // 409 Conflict
+            let constraint_name = db_err.constraint().unwrap_or("");
+            let error_message = match constraint_name {
+                name if name.contains("unique_mpesa_number") || name.contains("mpesa") => "Phone number is already registered to another account",
+                name if name.contains("email") => "Email address is already registered to another account", 
+                name if name.contains("username") => "Username is already taken",
+                _ => "Username, email, or phone number already exists"
+            };
+            Ok(HttpResponse::Conflict().json(error_message))  // 409 Conflict
         }
         Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to create user")),  // 500 Internal Error
     }
@@ -767,8 +776,28 @@ async fn update_user_verification(
         return Ok(response);
     }
 
+    // Get user details before updating verification status
+    let user = match db::get_user_by_id(&pool, *user_id).await {
+        Ok(user) => user,
+        Err(_) => return Ok(HttpResponse::NotFound().json("User not found")),
+    };
+
     match db::update_user_verification(&pool, *user_id, request.verified).await {
-        Ok(_) => Ok(HttpResponse::Ok().json("Verification status updated successfully")),
+        Ok(_) => {
+            // Send email notification based on verification status
+            if request.verified {
+                if let Err(e) = email::send_verification_approval_email(&user.email, &user.username).await {
+                    eprintln!("Failed to send approval email to {}: {:?}", user.email, e);
+                }
+            } else {
+                if let Err(e) = email::send_verification_rejection_email(&user.email, &user.username).await {
+                    eprintln!("Failed to send rejection email to {}: {:?}", user.email, e);
+                }
+            }
+            
+            let status = if request.verified { "approved" } else { "rejected" };
+            Ok(HttpResponse::Ok().json(format!("Vendor {} and email notification sent", status)))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to update verification: {:?}", e))),
     }
 }
@@ -806,10 +835,15 @@ async fn upload_verification_document(
     }
 
     match db::upload_verification_document(&pool, vendor_id, &request.verification_document).await {
-        Ok(_) => Ok(HttpResponse::Ok().json(json!({
-            "success": true,
-            "message": "Verification document submitted successfully. An administrator will review your submission."
-        }))),
+        Ok(_) => {
+            // Clear any previous verification rejection reason since they're uploading a new document
+            let _ = db::clear_verification_rejection_reason(&pool, vendor_id).await;
+            
+            Ok(HttpResponse::Ok().json(json!({
+                "success": true,
+                "message": "Verification document submitted successfully. An administrator will review your submission."
+            })))
+        },
         Err(e) => Ok(HttpResponse::InternalServerError().json(format!("Failed to upload verification document: {:?}", e))),
     }
 }
@@ -2419,6 +2453,132 @@ async fn chatbot_handler(req: web::Json<ChatbotRequest>) -> ActixResult<HttpResp
     }
 }
 
+/// POST /auth/password-reset - Initiate password reset by username verification
+#[post("/auth/password-reset")]
+async fn password_reset_request(
+    pool: web::Data<PgPool>,
+    request: web::Json<PasswordResetRequest>
+) -> ActixResult<HttpResponse> {
+    let username = &request.username;
+
+    // Validate username format
+    if username.is_empty() {
+        return Ok(HttpResponse::BadRequest().json("Username is required"));
+    }
+
+    // Check if user exists with this username
+    match db::find_user_by_username(&pool, username).await {
+        Ok(Some(_user)) => {
+            // User exists, proceed with password reset
+            let verification_code = format!("{:06}", rand::random::<u32>() % 1000000); // Generate 6-digit code
+            let expires_at = chrono::Utc::now() + chrono::Duration::minutes(10); // 10 minutes expiry
+
+            // Store the verification code
+            match db::store_password_reset_code(&pool, username, &verification_code, expires_at).await {
+                Ok(_) => {
+                    // Development: Print verification code to console instead of sending SMS
+                    println!("
+🔐 DEVELOPMENT MODE - PASSWORD RESET CODE");
+                    println!("👤 Username: {}", username);
+                    println!("🔢 Verification Code: {}", verification_code);
+                    println!("⏰ Expires At: {}", expires_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    println!("──────────────────────────────────────\n");
+                    
+                    let response = PasswordResetResponse {
+                        message: format!("Verification code generated for '{}'. Check the backend console for the code (Development Mode).", username),
+                        expires_at: expires_at.to_rfc3339(),
+                    };
+                    Ok(HttpResponse::Ok().json(response))
+                },
+                Err(e) => {
+                    println!("💾 Failed to store verification code: {:?}", e);
+                    Ok(HttpResponse::InternalServerError().json("Failed to initiate password reset. Please try again."))
+                }
+            }
+        },
+        Ok(None) => {
+            // For security, don't reveal if username exists or not
+            // Always return success to prevent username enumeration
+            let fake_expires_at = chrono::Utc::now() + chrono::Duration::minutes(10);
+            let response = PasswordResetResponse {
+                message: format!("If an account with username '{}' exists, a verification code has been generated. Check the backend console (Development Mode).", username),
+                expires_at: fake_expires_at.to_rfc3339(),
+            };
+            Ok(HttpResponse::Ok().json(response))
+        },
+        Err(e) => {
+            println!("🔍 Database error looking up user by phone: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json("Internal server error. Please try again."))
+        }
+    }
+}
+
+/// POST /auth/password-reset/verify - Verify code and reset password
+#[post("/auth/password-reset/verify")]
+async fn password_reset_verify(
+    pool: web::Data<PgPool>,
+    request: web::Json<PasswordResetVerifyRequest>
+) -> ActixResult<HttpResponse> {
+    let username = &request.username;
+    let verification_code = &request.verification_code;
+    let new_password = &request.new_password;
+
+    // Validate new password requirements (same as signup)
+    if new_password.len() < 8 {
+        return Ok(HttpResponse::BadRequest().json("Password must be at least 8 characters"));
+    }
+    if !new_password.chars().any(|c| c.is_uppercase()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one uppercase letter"));
+    }
+    if !new_password.chars().any(|c| c.is_lowercase()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one lowercase letter"));
+    }
+    if !new_password.chars().any(|c| c.is_numeric()) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one number"));
+    }
+    if !new_password.chars().any(|c| "!@#$%^&*(),.?\":{}|<>".contains(c)) {
+        return Ok(HttpResponse::BadRequest().json("Password must contain at least one special character"));
+    }
+
+    // Verify the code
+    match db::verify_password_reset_code(&pool, username, verification_code).await {
+        Ok(true) => {
+            // Code is valid, reset the password
+            match db::reset_user_password_by_username(&pool, username, new_password).await {
+                Ok(user) => {
+                    // Development: Print password reset confirmation to console instead of sending email
+                    println!("
+✅ DEVELOPMENT MODE - PASSWORD RESET SUCCESSFUL");
+                    println!("👤 Username: {}", user.username);
+                    println!("📧 Email: {}", user.email);
+                    println!("📱 Phone: {:?}", user.mpesa_number);
+                    println!("🔒 New password has been set successfully!");
+                    println!("──────────────────────────────────────\n");
+
+                    // Clean up expired codes
+                    let _ = db::cleanup_expired_reset_codes(&pool).await;
+
+                    Ok(HttpResponse::Ok().json(json!({
+                        "message": "Password reset successful. You can now log in with your new password.",
+                        "username": user.username
+                    })))
+                },
+                Err(e) => {
+                    println!("🔒 Failed to reset password: {:?}", e);
+                    Ok(HttpResponse::InternalServerError().json("Failed to reset password. Please try again."))
+                }
+            }
+        },
+        Ok(false) => {
+            Ok(HttpResponse::BadRequest().json("Invalid or expired verification code"))
+        },
+        Err(e) => {
+            println!("🔍 Database error verifying code: {:?}", e);
+            Ok(HttpResponse::InternalServerError().json("Internal server error. Please try again."))
+        }
+    }
+}
+
 /**
  * Initialize route configuration
  *
@@ -2434,6 +2594,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(delete_product);     // DELETE /products/{product_id} (vendors only)
     cfg.service(login);              // POST /login
     cfg.service(signup);             // POST /signup
+    cfg.service(password_reset_request); // POST /auth/password-reset
+    cfg.service(password_reset_verify);  // POST /auth/password-reset/verify
     cfg.service(update_profile_image); // PATCH /profile/image
     cfg.service(update_profile);     // PATCH /profile
     cfg.service(update_user_profile_comprehensive); // PUT /user/profile (comprehensive update)

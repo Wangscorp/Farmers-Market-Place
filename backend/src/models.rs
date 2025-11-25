@@ -27,6 +27,7 @@ pub struct User {
     pub verified: bool,
     pub banned: bool,
     pub verification_document: Option<String>, // Base64 encoded verification document
+    pub verification_rejected_reason: Option<String>, // Reason for verification rejection
     pub secondary_email: Option<String>,
     pub mpesa_number: Option<String>,
     pub payment_preference: Option<String>,
@@ -361,4 +362,33 @@ pub fn create_jwt(user: &User) -> Result<String, Error> {
 pub fn verify_jwt(token: &str) -> Result<Claims, Error> {
     decode::<Claims>(token, &DecodingKey::from_secret(JWT_SECRET.as_ref()), &Validation::default())
         .map(|data| data.claims)
+}
+
+// Password Reset Models
+#[derive(Serialize, Deserialize)]
+pub struct PasswordResetRequest {
+    pub username: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PasswordResetVerifyRequest {
+    pub username: String,
+    pub verification_code: String,
+    pub new_password: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PasswordResetResponse {
+    pub message: String,
+    pub expires_at: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PasswordResetCode {
+    pub id: i32,
+    pub username: String,
+    pub verification_code: String,
+    pub expires_at: String,
+    pub used: bool,
+    pub created_at: String,
 }

@@ -45,6 +45,20 @@ pub async fn init_db() -> PgPool {
     .await
     .expect("Failed to create users table");
 
+    // Add unique constraint for mpesa_number if not exists
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD CONSTRAINT unique_mpesa_number UNIQUE (mpesa_number)"
+    )
+    .execute(&pool)
+    .await;
+    
+    // Add unique constraint for email if not exists (redundant but safe)
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD CONSTRAINT unique_email UNIQUE (email)"
+    )
+    .execute(&pool)
+    .await;
+
     // Alter table to add verification_document column if it doesn't exist (for existing databases)
     let _ = sqlx::query(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_document TEXT"
@@ -86,6 +100,13 @@ pub async fn init_db() -> PgPool {
     // Add wallet_balance column for vendor earnings
     let _ = sqlx::query(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_balance FLOAT8 NOT NULL DEFAULT 0.0"
+    )
+    .execute(&pool)
+    .await;
+
+    // Add verification_rejected_reason column for tracking rejection reasons
+    let _ = sqlx::query(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_rejected_reason TEXT"
     )
     .execute(&pool)
     .await;
@@ -250,6 +271,49 @@ pub async fn init_db() -> PgPool {
     )
     .execute(&pool)
     .await;
+
+    // Create password_reset_codes table if not exists
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS password_reset_codes (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(50) NOT NULL,
+            verification_code VARCHAR(10) NOT NULL,
+            expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            used BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to create password_reset_codes table");
+
+    // Drop old index and create new one for username
+    let _ = sqlx::query("DROP INDEX IF EXISTS idx_password_reset_phone_expires")
+        .execute(&pool)
+        .await;
+    
+    // Create index on username and expires_at for efficient lookups
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_password_reset_username_expires ON password_reset_codes(username, expires_at)"
+    )
+    .execute(&pool)
+    .await;
+
+    // Safe migration: Add username column if migrating from phone_number
+    let _ = sqlx::query(
+        "ALTER TABLE password_reset_codes ADD COLUMN IF NOT EXISTS username VARCHAR(50)"
+    )
+    .execute(&pool)
+    .await;
+    
+    // Drop phone_number column if it exists (cleanup for existing tables)
+    let _ = sqlx::query(
+        "ALTER TABLE password_reset_codes DROP COLUMN IF EXISTS phone_number"
+    )
+    .execute(&pool)
+    .await;
     
     pool
 }
@@ -318,6 +382,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
         verified: row.try_get(5)?,
         banned: false,
         verification_document: None,
+        verification_rejected_reason: None,
         secondary_email: None,
         mpesa_number: row.try_get(7)?,
         payment_preference: None,
@@ -332,7 +397,7 @@ pub async fn create_user(pool: &PgPool, username: &str, email: &str, password: &
 pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) -> Result<User, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT id, username, email, password_hash, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance
+        SELECT id, username, email, password_hash, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance, verification_rejected_reason
         FROM users
         WHERE username = $1
         "#,
@@ -368,6 +433,7 @@ pub async fn authenticate_user(pool: &PgPool, username: &str, password: &str) ->
         verified: row.try_get(6)?,
         banned: row.try_get(7)?,
         verification_document: None,
+        verification_rejected_reason: row.try_get(13)?,
         secondary_email: row.try_get(8)?,
         mpesa_number: row.try_get(9)?,
         payment_preference: row.try_get(10)?,
@@ -772,6 +838,7 @@ pub async fn get_all_users(pool: &PgPool) -> Result<Vec<User>, sqlx::Error> {
             verified: row.try_get(5)?,
             banned: row.try_get(6)?,
             verification_document: None,
+            verification_rejected_reason: None,
             secondary_email: row.try_get(7)?,
             mpesa_number: row.try_get(8)?,
             payment_preference: row.try_get(9)?,
@@ -831,13 +898,31 @@ pub async fn update_user_role(pool: &PgPool, user_id: i32, new_role: &Role) -> R
 }
 
 pub async fn update_user_verification(pool: &PgPool, user_id: i32, verified: bool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE users SET verified = $1 WHERE id = $2",
-    )
-    .bind(verified)
-    .bind(user_id)
-    .execute(pool)
-    .await?;
+    if verified {
+        // User is being approved - clear any previous rejection reason
+        sqlx::query(
+            "UPDATE users SET verified = $1, verification_rejected_reason = NULL WHERE id = $2",
+        )
+        .bind(verified)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    } else {
+        // User is being rejected - remove verification documents and set rejection reason
+        sqlx::query(
+            r#"
+            UPDATE users 
+            SET verified = $1, 
+                verification_document = NULL, 
+                verification_rejected_reason = 'Verification denied due to non-human image upload. Please upload a clear image of yourself.'
+            WHERE id = $2
+            "#,
+        )
+        .bind(verified)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }
@@ -2212,4 +2297,225 @@ pub async fn process_wallet_withdrawal(
 
     // Return new balance
     Ok(current_balance - amount)
+}
+
+/// Get user by ID with full profile information
+pub async fn get_user_by_id(pool: &PgPool, user_id: i32) -> Result<crate::models::User, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, username, email, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance
+        FROM users
+        WHERE id = $1
+        "#,
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    let user = crate::models::User {
+        id: row.try_get(0)?,
+        username: row.try_get(1)?,
+        email: row.try_get(2)?,
+        role: match row.try_get::<String, _>(3)?.as_str() {
+            "Admin" => crate::models::Role::Admin,
+            "Customer" => crate::models::Role::Customer,
+            "Vendor" => crate::models::Role::Vendor,
+            _ => crate::models::Role::Customer,
+        },
+        profile_image: row.try_get(4)?,
+        verified: row.try_get(5)?,
+        banned: row.try_get(6)?,
+        verification_document: None,
+        verification_rejected_reason: None,
+        secondary_email: row.try_get(7)?,
+        mpesa_number: row.try_get(8)?,
+        payment_preference: row.try_get(9)?,
+        location_string: row.try_get(10)?,
+        wallet_balance: row.try_get(11).unwrap_or(0.0),
+    };
+
+    Ok(user)
+}
+
+// Password Reset Functions
+
+/// Store a password reset verification code
+pub async fn store_password_reset_code(
+    pool: &PgPool,
+    username: &str,
+    verification_code: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+) -> Result<crate::models::PasswordResetCode, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        INSERT INTO password_reset_codes (username, verification_code, expires_at)
+        VALUES ($1, $2, $3)
+        RETURNING id, username, verification_code, expires_at, used, created_at
+        "#,
+    )
+    .bind(username)
+    .bind(verification_code)
+    .bind(expires_at)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(crate::models::PasswordResetCode {
+        id: row.try_get(0)?,
+        username: row.try_get(1)?,
+        verification_code: row.try_get(2)?,
+        expires_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>(3)?.to_rfc3339(),
+        used: row.try_get(4)?,
+        created_at: row.try_get::<chrono::DateTime<chrono::Utc>, _>(5)?.to_rfc3339(),
+    })
+}
+
+/// Verify password reset code and mark it as used
+pub async fn verify_password_reset_code(
+    pool: &PgPool,
+    username: &str,
+    verification_code: &str,
+) -> Result<bool, sqlx::Error> {
+    let now = chrono::Utc::now();
+    
+    // Check if code exists, is valid, and not expired
+    let row = sqlx::query(
+        r#"
+        SELECT id FROM password_reset_codes
+        WHERE username = $1 
+        AND verification_code = $2 
+        AND expires_at > $3 
+        AND used = FALSE
+        "#,
+    )
+    .bind(username)
+    .bind(verification_code)
+    .bind(now)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(row) = row {
+        let code_id: i32 = row.try_get(0)?;
+        
+        // Mark the code as used
+        sqlx::query(
+            "UPDATE password_reset_codes SET used = TRUE WHERE id = $1"
+        )
+        .bind(code_id)
+        .execute(pool)
+        .await?;
+        
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
+/// Reset user password using username
+pub async fn reset_user_password_by_username(
+    pool: &PgPool,
+    username: &str,
+    new_password: &str,
+) -> Result<crate::models::User, sqlx::Error> {
+    let password_hash = bcrypt::hash(new_password, bcrypt::DEFAULT_COST)
+        .map_err(|_| sqlx::Error::RowNotFound)?;
+
+    let row = sqlx::query(
+        r#"
+        UPDATE users 
+        SET password_hash = $1
+        WHERE username = $2
+        RETURNING id, username, email, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance
+        "#,
+    )
+    .bind(password_hash)
+    .bind(username)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(crate::models::User {
+        id: row.try_get(0)?,
+        username: row.try_get(1)?,
+        email: row.try_get(2)?,
+        role: match row.try_get::<String, _>(3)?.as_str() {
+            "Admin" => crate::models::Role::Admin,
+            "Customer" => crate::models::Role::Customer,
+            "Vendor" => crate::models::Role::Vendor,
+            _ => crate::models::Role::Customer,
+        },
+        profile_image: row.try_get(4)?,
+        verified: row.try_get(5)?,
+        banned: row.try_get(6)?,
+        verification_document: None,
+        verification_rejected_reason: None,
+        secondary_email: row.try_get(7)?,
+        mpesa_number: row.try_get(8)?,
+        payment_preference: row.try_get(9)?,
+        location_string: row.try_get(10)?,
+        wallet_balance: row.try_get(11).unwrap_or(0.0),
+    })
+}
+
+/// Clean up expired password reset codes
+pub async fn cleanup_expired_reset_codes(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    let now = chrono::Utc::now();
+    let result = sqlx::query(
+        "DELETE FROM password_reset_codes WHERE expires_at < $1"
+    )
+    .bind(now)
+    .execute(pool)
+    .await?;
+
+    Ok(result.rows_affected())
+}
+
+/// Clear verification rejection reason when user uploads new verification document
+pub async fn clear_verification_rejection_reason(pool: &PgPool, user_id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE users SET verification_rejected_reason = NULL WHERE id = $1",
+    )
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Find user by username (for password reset)
+pub async fn find_user_by_username(pool: &PgPool, username: &str) -> Result<Option<crate::models::User>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, username, email, role, profile_image, verified, banned, secondary_email, mpesa_number, payment_preference, location_string, wallet_balance
+        FROM users
+        WHERE username = $1
+        "#,
+    )
+    .bind(username)
+    .fetch_optional(pool)
+    .await?;
+
+    if let Some(row) = row {
+        Ok(Some(crate::models::User {
+            id: row.try_get(0)?,
+            username: row.try_get(1)?,
+            email: row.try_get(2)?,
+            role: match row.try_get::<String, _>(3)?.as_str() {
+                "Admin" => crate::models::Role::Admin,
+                "Customer" => crate::models::Role::Customer,
+                "Vendor" => crate::models::Role::Vendor,
+                _ => crate::models::Role::Customer,
+            },
+            profile_image: row.try_get(4)?,
+            verified: row.try_get(5)?,
+            banned: row.try_get(6)?,
+            verification_document: None,
+            verification_rejected_reason: None,
+            secondary_email: row.try_get(7)?,
+            mpesa_number: row.try_get(8)?,
+            payment_preference: row.try_get(9)?,
+            location_string: row.try_get(10)?,
+            wallet_balance: row.try_get(11).unwrap_or(0.0),
+        }))
+    } else {
+        Ok(None)
+    }
 }

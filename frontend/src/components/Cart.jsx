@@ -194,7 +194,7 @@ const Cart = () => {
       setRefreshing(true);
       await loadCartItems();
       toast.success("Cart refreshed");
-    } catch (error) {
+    } catch {
       toast.error("Failed to refresh cart");
     } finally {
       setRefreshing(false);

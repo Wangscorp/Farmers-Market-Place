@@ -64,6 +64,22 @@ const VerificationUpload = () => {
           </div>
         ) : (
           <>
+            {/* Show verification rejection reason if exists */}
+            {user?.verification_rejected_reason && (
+              <div className="rejection-notice">
+                <div className="rejection-icon">⚠️</div>
+                <div className="rejection-message">
+                  <h4>Verification Rejected</h4>
+                  <p>{user.verification_rejected_reason}</p>
+                  <p>
+                    <strong>
+                      Please upload a new verification document below:
+                    </strong>
+                  </p>
+                </div>
+              </div>
+            )}
+
             <p className="verification-description">
               Upload a clear photo of your ID or business license to get
               verified as a vendor. This helps us ensure quality and trustworthy
