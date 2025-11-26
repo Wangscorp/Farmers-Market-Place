@@ -48,8 +48,33 @@ const Products = () => {
         url += `?${params.join("&")}`;
       }
 
+      console.log("[Products] Fetching products with URL:", url);
+      console.log("[Products] Location-based shopping:", locationBasedShopping);
+      console.log("[Products] User location:", user?.location_string);
+
       const response = await axios.get(url);
       const productsData = response.data;
+
+      if (
+        locationBasedShopping &&
+        user?.location_string &&
+        productsData.length === 0
+      ) {
+        toast.info(
+          `No products found in your area (${user.location_string}). Showing all available products.`
+        );
+        // Fallback to all products if no local products found
+        const fallbackResponse = await axios.get("/products");
+        const fallbackData = fallbackResponse.data;
+        setProducts(
+          fallbackData.map((product) => ({
+            ...product,
+            reviewCount: 0,
+            averageRating: 0,
+          }))
+        );
+        return;
+      }
 
       // Fetch reviews for each product
       const productsWithReviews = await Promise.all(
@@ -283,13 +308,45 @@ const Products = () => {
               All Shops
             </button>
           </div>
-          <p className="toggle-description">
-            {locationBasedShopping
-              ? user?.location_string
-                ? `Showing products from vendors in ${user.location_string}`
-                : "Please set your location in your profile to filter products"
-              : "Browsing products from all vendors nationwide"}
-          </p>
+          <div className="location-status">
+            <p className="toggle-description">
+              {locationBasedShopping ? (
+                user?.location_string ? (
+                  <>
+                    📍 Showing products from vendors in{" "}
+                    <strong>{user.location_string}</strong>
+                    {products.length === 0 && !loading && (
+                      <span className="no-local-products">
+                        <br />
+                        No local products found. Try expanding your search area.
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    ⚠️ Please set your location in your profile to see local
+                    products
+                    <br />
+                    <span className="location-help">
+                      Go to your profile and add your city or area to discover
+                      nearby vendors.
+                    </span>
+                  </>
+                )
+              ) : (
+                "🌍 Browsing products from all vendors nationwide"
+              )}
+            </p>
+            {locationBasedShopping && user?.location_string && (
+              <div className="local-product-stats">
+                {loading ? (
+                  <span>Finding local products...</span>
+                ) : (
+                  <span>{products.length} local products available</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

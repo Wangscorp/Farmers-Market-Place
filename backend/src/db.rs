@@ -197,13 +197,30 @@ pub async fn init_db() -> PgPool {
             receiver_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
             content TEXT NOT NULL,
             is_read BOOLEAN DEFAULT FALSE,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE
         )
         "#,
     )
     .execute(&pool)
     .await
     .expect("Failed to create messages table");
+
+    // Add updated_at column to messages table if it doesn't exist
+    sqlx::query(
+        r#"
+        DO $$ 
+        BEGIN 
+            IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                          WHERE table_name = 'messages' AND column_name = 'updated_at') THEN
+                ALTER TABLE messages ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE;
+            END IF;
+        END $$;
+        "#,
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to add updated_at column to messages table");
 
     // Create follows table if not exists
     sqlx::query(
@@ -1401,6 +1418,61 @@ pub async fn mark_messages_as_read(pool: &PgPool, user_id: i32, other_user_id: i
         "UPDATE messages SET is_read = TRUE WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE"
     )
     .bind(other_user_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn edit_message(pool: &PgPool, message_id: i32, user_id: i32, new_content: &str) -> Result<crate::models::Message, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        UPDATE messages 
+        SET content = $1, updated_at = NOW() 
+        WHERE id = $2 AND sender_id = $3
+        RETURNING id, sender_id, receiver_id, content, is_read, 
+                  COALESCE(updated_at, created_at) as created_at
+        "#
+    )
+    .bind(new_content)
+    .bind(message_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+
+    // Get sender and receiver usernames
+    let user_row = sqlx::query(
+        r#"
+        SELECT 
+            s.username as sender_username,
+            r.username as receiver_username
+        FROM messages m
+        JOIN users s ON m.sender_id = s.id
+        JOIN users r ON m.receiver_id = r.id
+        WHERE m.id = $1
+        "#
+    )
+    .bind(message_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(crate::models::Message {
+        id: row.try_get("id")?,
+        sender_id: row.try_get("sender_id")?,
+        receiver_id: row.try_get("receiver_id")?,
+        content: row.try_get("content")?,
+        is_read: row.try_get("is_read")?,
+        created_at: row.try_get("created_at")?,
+        sender_username: user_row.try_get("sender_username")?,
+        receiver_username: user_row.try_get("receiver_username")?,
+    })
+}
+
+pub async fn delete_message(pool: &PgPool, message_id: i32, user_id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM messages WHERE id = $1 AND sender_id = $2"
+    )
+    .bind(message_id)
     .bind(user_id)
     .execute(pool)
     .await?;

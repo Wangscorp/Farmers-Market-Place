@@ -1,7 +1,7 @@
 //! HTTP route handlers for the Farmers Market Place API.
 //! Provides endpoints for products, authentication, cart, messaging, and M-Pesa checkout.
 
-use actix_web::{get, post, patch, delete, web, HttpResponse, Result as ActixResult};
+use actix_web::{get, post, patch, put, delete, web, HttpResponse, Result as ActixResult};
 use sqlx::{PgPool, Row};
 use crate::models::{LoginRequest, SignupRequest, ProductRequest, Role, LoginResponse, create_jwt, verify_jwt, Claims, CartItemRequest, UpdateCartItemRequest, UpdateUserRoleRequest, UpdateUserVerificationRequest, UploadVerificationDocumentRequest, CheckoutRequest, CheckoutResponse, SendMessageRequest, FollowRequest, CreateReviewRequest, CreateShippingOrderRequest, UpdateShippingStatusRequest, VerifyDeliveryRequest, WithdrawRequest, WithdrawResponse, PasswordResetRequest, PasswordResetVerifyRequest, PasswordResetResponse};
 use crate::db;
@@ -1596,6 +1596,72 @@ async fn mark_messages_as_read_route(
 }
 
 /**
+ * PUT /messages/{message_id} - Edit a message
+ *
+ * Allows users to edit their own messages.
+ *
+ * @param message_id - The ID of the message to edit
+ * @body content - The new message content
+ * @returns The updated message object
+ */
+#[put("/messages/{message_id}")]
+async fn edit_message_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    message_id: web::Path<i32>,
+    body: web::Json<serde_json::Value>
+) -> ActixResult<HttpResponse> {
+    let current_user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    let content = match body.get("content").and_then(|c| c.as_str()) {
+        Some(content) => content.trim(),
+        None => return Ok(HttpResponse::BadRequest().json("Content is required")),
+    };
+
+    if content.is_empty() {
+        return Ok(HttpResponse::BadRequest().json("Message content cannot be empty"));
+    }
+
+    if content.len() > 500 {
+        return Ok(HttpResponse::BadRequest().json("Message content too long (max 500 characters)"));
+    }
+
+    match db::edit_message(&pool, *message_id, current_user_id, content).await {
+        Ok(message) => Ok(HttpResponse::Ok().json(message)),
+        Err(sqlx::Error::RowNotFound) => Ok(HttpResponse::NotFound().json("Message not found or you don't have permission to edit it")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to edit message")),
+    }
+}
+
+/**
+ * DELETE /messages/{message_id} - Delete a message
+ *
+ * Allows users to delete their own messages.
+ *
+ * @param message_id - The ID of the message to delete
+ * @returns Success message
+ */
+#[delete("/messages/{message_id}")]
+async fn delete_message_route(
+    req: actix_web::HttpRequest,
+    pool: web::Data<PgPool>,
+    message_id: web::Path<i32>
+) -> ActixResult<HttpResponse> {
+    let current_user_id = match extract_auth(&req) {
+        Ok(claims) => claims.sub,
+        Err(response) => return Ok(response),
+    };
+
+    match db::delete_message(&pool, *message_id, current_user_id).await {
+        Ok(_) => Ok(HttpResponse::Ok().json("Message deleted successfully")),
+        Err(_) => Ok(HttpResponse::InternalServerError().json("Failed to delete message or message not found")),
+    }
+}
+
+/**
  * POST /follow - Follow a vendor
  *
  * Allows customers to follow vendors.
@@ -2619,7 +2685,9 @@ pub fn init(cfg: &mut web::ServiceConfig) {
     cfg.service(send_message_route)
         .service(get_messages_between_users_route)
         .service(get_user_conversations_route)
-        .service(mark_messages_as_read_route);
+        .service(mark_messages_as_read_route)
+        .service(edit_message_route)
+        .service(delete_message_route);
 
     // Follow routes
     cfg.service(follow_vendor_route)

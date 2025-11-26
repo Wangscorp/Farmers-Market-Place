@@ -14,6 +14,11 @@ const Chat = React.memo(
     const { user } = useUser();
     const pollIntervalRef = useRef(null);
 
+    // Context menu and editing states
+    const [contextMenu, setContextMenu] = useState(null);
+    const [editingMessage, setEditingMessage] = useState(null);
+    const [editContent, setEditContent] = useState("");
+
     const loadMessages = useCallback(async () => {
       if (!otherUserId) return;
 
@@ -169,6 +174,90 @@ const Chat = React.memo(
       }
     };
 
+    // Handle right-click context menu
+    const handleContextMenu = (e, message) => {
+      e.preventDefault();
+
+      // Only show context menu for user's own messages
+      if (message.sender_id !== user.id) return;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      setContextMenu({
+        x: e.clientX,
+        y: e.clientY,
+        messageId: message.id,
+        message: message,
+      });
+    };
+
+    // Close context menu when clicking outside
+    useEffect(() => {
+      const handleClickOutside = () => {
+        setContextMenu(null);
+      };
+
+      if (contextMenu) {
+        document.addEventListener("click", handleClickOutside);
+        return () => document.removeEventListener("click", handleClickOutside);
+      }
+    }, [contextMenu]);
+
+    // Handle edit message
+    const handleEditMessage = (message) => {
+      setEditingMessage(message.id);
+      setEditContent(message.content);
+      setContextMenu(null);
+    };
+
+    // Submit edit
+    const handleEditSubmit = async (e) => {
+      e.preventDefault();
+      if (!editContent.trim() || !editingMessage) return;
+
+      try {
+        const response = await axios.put(`/messages/${editingMessage}`, {
+          content: editContent.trim(),
+        });
+
+        // Update the message in the local state
+        setMessages((prev) =>
+          prev.map((msg) => (msg.id === editingMessage ? response.data : msg))
+        );
+
+        setEditingMessage(null);
+        setEditContent("");
+        toast.success("Message updated");
+      } catch (error) {
+        console.error("Error editing message:", error);
+        toast.error("Failed to edit message");
+      }
+    };
+
+    // Cancel edit
+    const handleEditCancel = () => {
+      setEditingMessage(null);
+      setEditContent("");
+    };
+
+    // Handle delete message
+    const handleDeleteMessage = async (messageId) => {
+      if (!window.confirm("Are you sure you want to delete this message?")) {
+        return;
+      }
+
+      try {
+        await axios.delete(`/messages/${messageId}`);
+
+        // Remove the message from local state
+        setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+        setContextMenu(null);
+        toast.success("Message deleted");
+      } catch (error) {
+        console.error("Error deleting message:", error);
+        toast.error("Failed to delete message");
+      }
+    };
+
     if (!user) {
       return (
         <div className="chat-container">
@@ -207,11 +296,54 @@ const Chat = React.memo(
                   message.sender_id === user.id ? "sent" : "received"
                 }`}
               >
-                <div className="message-content">
-                  <p>{message.content}</p>
-                  <span className="message-time">
-                    {formatTime(message.created_at)}
-                  </span>
+                <div
+                  className="message-content"
+                  onContextMenu={(e) => handleContextMenu(e, message)}
+                >
+                  {editingMessage === message.id ? (
+                    // Edit mode
+                    <form
+                      onSubmit={handleEditSubmit}
+                      className="edit-message-form"
+                    >
+                      <input
+                        type="text"
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="edit-message-input"
+                        maxLength={500}
+                        autoFocus
+                        placeholder="Edit your message..."
+                      />
+                      <div className="edit-buttons">
+                        <button
+                          type="submit"
+                          className="edit-btn"
+                          disabled={!editContent.trim()}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          type="button"
+                          className="cancel-btn"
+                          onClick={handleEditCancel}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    // Display mode
+                    <>
+                      <p>{message.content}</p>
+                      <span className="message-time">
+                        {formatTime(message.created_at)}
+                        {message.updated_at && (
+                          <span className="message-edited"> (edited)</span>
+                        )}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             ))
@@ -236,6 +368,30 @@ const Chat = React.memo(
             Send
           </button>
         </form>
+
+        {/* Context Menu */}
+        {contextMenu && (
+          <div
+            className="context-menu"
+            style={{
+              left: contextMenu.x,
+              top: contextMenu.y,
+            }}
+          >
+            <button
+              className="context-menu-item"
+              onClick={() => handleEditMessage(contextMenu.message)}
+            >
+              ✏️ Edit Message
+            </button>
+            <button
+              className="context-menu-item delete"
+              onClick={() => handleDeleteMessage(contextMenu.messageId)}
+            >
+              🗑️ Delete Message
+            </button>
+          </div>
+        )}
       </div>
     );
   }
