@@ -14,8 +14,6 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { toast } from "react-toastify";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import * as XLSX from "xlsx";
 import "./SalesReport.css";
 
@@ -50,40 +48,7 @@ const SalesReport = () => {
     }
   };
 
-  const downloadPDF = () => {
-    const doc = new jsPDF();
-
-    doc.setFontSize(20);
-    doc.text("Sales Report", 14, 20);
-
-    doc.setFontSize(12);
-    doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 30);
-    doc.text(`Total Sales: KES ${report.total_sales.toFixed(2)}`, 14, 38);
-    doc.text(`Total Orders: ${report.total_orders}`, 14, 46);
-    doc.text(`Total Profit: KES ${report.total_profit.toFixed(2)}`, 14, 54);
-
-    if (report.sales_by_product && report.sales_by_product.length > 0) {
-      doc.text("Product Sales Details", 14, 66);
-
-      const tableData = report.sales_by_product.map((product) => [
-        product.product_name,
-        product.quantity_sold.toString(),
-        `KES ${product.total_revenue.toFixed(2)}`,
-      ]);
-
-      doc.autoTable({
-        startY: 70,
-        head: [["Product Name", "Quantity Sold", "Total Revenue"]],
-        body: tableData,
-        theme: "grid",
-        headStyles: { fillColor: [76, 175, 80] },
-      });
-    }
-
-    doc.save(`sales-report-${new Date().toISOString().split("T")[0]}.pdf`);
-    toast.success("PDF downloaded successfully!");
-  };
-
+  
   const downloadExcel = () => {
     const wb = XLSX.utils.book_new();
 
@@ -138,9 +103,6 @@ const SalesReport = () => {
       <div className="report-header">
         <h2>Sales Analytics</h2>
         <div className="download-buttons">
-          <button onClick={downloadPDF} className="download-btn pdf-btn">
-            📄 Download PDF
-          </button>
           <button onClick={downloadExcel} className="download-btn excel-btn">
             📊 Download Excel
           </button>

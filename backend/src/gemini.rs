@@ -42,7 +42,7 @@ struct PartResponse {
     text: String,
 }
 
-/// Get a response from the Gemini Pro model.
+/// Get a response from the model.
 pub async fn get_gemini_response(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
     let api_key = match env::var("GEMINI_API_KEY") {
         Ok(key) => key,
@@ -50,7 +50,7 @@ pub async fn get_gemini_response(prompt: &str) -> Result<String, Box<dyn std::er
             return Ok("I'm sorry, but the AI chatbot is currently unavailable. The administrator needs to configure the Gemini API key. Please try again later or contact support for assistance.".to_string());
         }
     };
-    let model = "gemini-1.5-flash:generateContent";
+    let model = "gemini-2.5-flash:generateContent";
     let url = format!("{}{}", GEMINI_API_BASE_URL, model);
 
     let client = reqwest::Client::new();
